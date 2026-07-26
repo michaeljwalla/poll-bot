@@ -35,7 +35,7 @@ func getFFlag(flags int) (fflag int) {
 	}
 	return
 }
-func New(path string, flags int) (log *Log, err error) {
+func New(path string, flags int, groups ...string) (log *Log, err error) {
 	if err = checkFlags(flags); err != nil {
 		return
 	}
@@ -44,9 +44,11 @@ func New(path string, flags int) (log *Log, err error) {
 		flags: flags,
 		date:  date,
 	}
+
+	groups = append(groups, LogGroup.AUDIT)
 	if !hasFlag(flags, LogFlag.WriteFile) {
-		log.Add("Instance Ready", LogGroup.AUDIT)
-		log.Add(StringFlags(flags), LogGroup.AUDIT)
+		log.Add("Logger Instance Ready", groups...)
+		log.Add(StringFlags(flags), groups...)
 		return
 	}
 
@@ -57,8 +59,8 @@ func New(path string, flags int) (log *Log, err error) {
 		return
 	}
 	log.File = file
-	log.Add("File Ready", LogGroup.AUDIT)
-	log.Add(StringFlags(flags), LogGroup.AUDIT)
+	log.Add("Logger File Ready", groups...)
+	log.Add(StringFlags(flags), groups...)
 	return
 }
 
@@ -149,4 +151,8 @@ func (l Log) Add(s any, groups ...string) (err error) {
 		log.Print(output)
 	}
 	return
+}
+func (l Log) Close() {
+	l.Add("Logger Closed\n", LogGroup.AUDIT)
+	l.File.Close()
 }

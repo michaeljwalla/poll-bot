@@ -80,7 +80,7 @@ func Start(instr StartInstructions) (session *Session, err error) {
 			id := i.Member.User.ID
 			alias := resolveAlias(id, aliases)
 
-			logger.Add(fmt.Sprintf("%v %33s) | %s", id, "("+alias+")", rebuildCommand(&commandData)), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+			logger.Add(fmt.Sprintf("%v %33s) | %s", id, "("+alias, rebuildCommand(&commandData)), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
 			handle(s, i)
 		}
 	})
@@ -118,7 +118,7 @@ func EndSession(session *Session) {
 	session.Logger.Add("Ending session...", audit.LogGroup.BOT)
 	defer func() {
 		session.DGSession.Close()
-		session.Logger.Add("Session ended\n", audit.LogGroup.BOT)
+		session.Logger.Add("Session ended", audit.LogGroup.BOT)
 	}()
 	// 8. Clean up and remove commands upon shutdown
 	dgSession := session.DGSession

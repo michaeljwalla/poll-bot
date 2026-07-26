@@ -5,9 +5,9 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"poll-bot/internal/audit"
-	"poll-bot/internal/bot"
-	"poll-bot/internal/commands"
+	"poll-bot/src/audit"
+	"poll-bot/src/bot"
+	"poll-bot/src/commands"
 	"syscall"
 
 	"github.com/joho/godotenv"

@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"poll-bot/internal/unix"
+	"poll-bot/src/unix"
 	"strconv"
 
 	"github.com/bwmarrin/discordgo"

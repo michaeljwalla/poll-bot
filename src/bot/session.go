@@ -2,8 +2,8 @@ package bot
 
 import (
 	"fmt"
-	"poll-bot/internal/audit"
-	"poll-bot/internal/commands"
+	"poll-bot/src/audit"
+	"poll-bot/src/commands"
 
 	"github.com/bwmarrin/discordgo"
 )

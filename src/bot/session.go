@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"poll-bot/src/audit"
 	"poll-bot/src/commands"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -36,6 +37,29 @@ func resolveAlias(s string, as map[string]string) string {
 	return "?"
 }
 
+func getCommandValue(opt *discordgo.ApplicationCommandInteractionDataOption) any {
+	switch opt.Type {
+	case discordgo.ApplicationCommandOptionString:
+		return fmt.Sprintf("%q", opt.StringValue())
+	case discordgo.ApplicationCommandOptionInteger:
+		return opt.IntValue()
+	case discordgo.ApplicationCommandOptionBoolean:
+		return opt.BoolValue()
+	case discordgo.ApplicationCommandOptionNumber:
+		return opt.FloatValue()
+	default:
+		return opt.Value
+	}
+}
+func rebuildCommand(c *discordgo.ApplicationCommandInteractionData) string {
+	args := make([]string, len(c.Options)+1)
+	args[0] = fmt.Sprintf("/%s", c.Name)
+	for i, option := range c.Options {
+		args[i+1] = fmt.Sprintf("%s:%v", option.Name, getCommandValue(option))
+	}
+	return strings.Join(args, " ")
+}
+
 // 2. Initialize a new Discord
 func Start(instr StartInstructions) (session *Session, err error) {
 	token, commands, logger, aliases := instr.Token, instr.Commands, instr.Logger, instr.TargetAliases
@@ -56,7 +80,7 @@ func Start(instr StartInstructions) (session *Session, err error) {
 			id := i.Member.User.ID
 			alias := resolveAlias(id, aliases)
 
-			logger.Add(fmt.Sprintf("%v %33s) | /%s", id, "("+alias, commandData.Name), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+			logger.Add(fmt.Sprintf("%v %33s) | %s", id, "("+alias+")", rebuildCommand(&commandData)), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
 			handle(s, i)
 		}
 	})

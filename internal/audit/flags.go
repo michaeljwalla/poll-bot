@@ -2,6 +2,7 @@ package audit
 
 import (
 	"fmt"
+	"strings"
 )
 
 var LogFlag = struct {
@@ -16,55 +17,60 @@ var LogFlag = struct {
 	FileErrorNotFound int
 }{
 	Default:           0,
-	ErrorIsPanic:      0b00000001, //e1
-	ErrorIsWarn:       0b00000010, //e1
-	ErrorIsPass:       0b00000100, //e1
-	WriteMemory:       0b00001000, //i2
-	WriteFile:         0b00010000, //i2
-	FileAppend:        0b00100000, //e3
-	FileOverwrite:     0b01000000, //e3
-	FileErrorNotFound: 0b10000000,
+	ErrorIsPanic:      1 << 0, //e1
+	ErrorIsWarn:       1 << 1, //e1
+	ErrorIsPass:       1 << 2, //e1
+	WriteMemory:       1 << 3, //i2
+	WriteFile:         1 << 4, //i2
+	FileAppend:        1 << 5, //e3
+	FileOverwrite:     1 << 6, //e3
+	FileErrorNotFound: 1 << 7,
 }
 
+var logStrings = map[int]string{
+	LogFlag.Default:           "LogFlag.Default",
+	LogFlag.ErrorIsPanic:      "LogFlag.ErrorIsPanic",
+	LogFlag.ErrorIsWarn:       "LogFlag.ErrorIsWarn",
+	LogFlag.ErrorIsPass:       "LogFlag.ErrorIsPass",
+	LogFlag.WriteMemory:       "LogFlag.WriteMemory",
+	LogFlag.WriteFile:         "LogFlag.WriteFile",
+	LogFlag.FileAppend:        "LogFlag.FileAppend",
+	LogFlag.FileOverwrite:     "LogFlag.FileOverwrite",
+	LogFlag.FileErrorNotFound: "LogFlag.FileErrorNotFound",
+}
+
+func Stringify(flag int) string {
+	if val, ok := logStrings[flag]; ok {
+		return val
+	}
+	return fmt.Sprintf("Unknown %b", flag)
+}
+func StringFlags(flags int) string {
+	sFlags := []string{}
+	for flag, str := range logStrings {
+		if flag == LogFlag.Default || !hasFlag(flags, flag) {
+			continue
+		}
+		sFlags = append(sFlags, str)
+	}
+	return fmt.Sprintf("Flags 0b%b -> %s", flags, strings.Join(sFlags, "|"))
+}
 func init() {
-	LogFlag.Default = LogFlag.ErrorIsPass | LogFlag.WriteMemory
+	LogFlag.Default = LogFlag.ErrorIsPanic | LogFlag.WriteMemory | LogFlag.WriteFile | LogFlag.FileAppend
 }
-
-var exclusive map[int]string = map[int]string{
-	LogFlag.ErrorIsPanic | LogFlag.ErrorIsPass | LogFlag.ErrorIsWarn: "ErrorIsPanic/Warn/Pass",
-	LogFlag.FileAppend | LogFlag.FileOverwrite:                       "FileAppend/Overwrite",
-}
-var inclusive map[int]string = map[int]string{
-	LogFlag.WriteMemory | LogFlag.WriteFile: "WriteMemory/File",
-}
-
 func hasFlag(cmp int, f int) bool {
 	return f&cmp == f
 }
-func consume(exc int, cmp int) (count int) {
-	check := exc & cmp
-	for check != 0 {
-		if hasFlag(check, 0b1) {
-			count++
-		}
-		check >>= 1
+func checkFlags(flags int) error {
+	if flags&(LogFlag.WriteFile|LogFlag.WriteMemory) == 0 {
+		return fmt.Errorf("Flag configuration missing Write: %b", flags)
 	}
-	return
-}
-func checkFlags(in int) (err error) {
-	for flag, reason := range exclusive {
-		if consume(flag, in) == 1 {
-			continue
-		}
-		err = fmt.Errorf("Specify flag: %s", reason)
-		return
+	mod := flags
+	for flag := range logStrings {
+		mod &= ^flag
 	}
-	for flag, reason := range inclusive {
-		if consume(flag, in) != 0 {
-			continue
-		}
-		err = fmt.Errorf("Specify flag(s): %s", reason)
-		return
+	if mod != 0 {
+		return fmt.Errorf("Unknown flag configuration: %b", flags)
 	}
-	return
+	return nil
 }

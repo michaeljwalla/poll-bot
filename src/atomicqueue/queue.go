@@ -49,43 +49,39 @@ func New[T any](size int, channelSize int, flags int) (queue *AtomicQueue[T], er
 	return
 }
 
-func (q AtomicQueue[T]) Push(v *T) error {
-	return q.worker.Push(v)
+func (q *AtomicQueue[T]) Push(value T) error {
+	return q.worker.Push(&value)
 }
-func (q AtomicQueue[T]) Pop() (value *T, err error) {
-	value, err = q.worker.Pop()
+func (q *AtomicQueue[T]) Pop() (value T, err error) {
+	v, err := q.worker.Pop()
+	if err != nil {
+		value = *v
+	}
 	return
 }
 
-func (q AtomicQueue[T]) SetCallback(callback func(*AtomicQueue[T])) error {
-	if q.worker.Active() {
-		return errors.New("Cannot update callback on an active queue")
-	}
-	return nil
-}
-
-func (q AtomicQueue[T]) Active() bool {
+func (q *AtomicQueue[T]) Active() bool {
 	return q.worker.Active()
 }
 
-func (q AtomicQueue[T]) Length() int {
+func (q *AtomicQueue[T]) Length() int {
 	return q.worker.Length()
 }
-func (q AtomicQueue[T]) Size() int {
+func (q *AtomicQueue[T]) Size() int {
 	return q.size
 }
-func (q AtomicQueue[T]) Full() bool {
+func (q *AtomicQueue[T]) Full() bool {
 	return q.worker.Full()
 }
-func (q AtomicQueue[T]) Empty() bool {
+func (q *AtomicQueue[T]) Empty() bool {
 	return q.worker.Empty()
 }
 
 // can no longer push to queue
-func (q AtomicQueue[T]) Close() {
+func (q *AtomicQueue[T]) Close() {
 	q.worker.Stop()
 }
 
-func (q AtomicQueue[T]) Dropped() int {
+func (q *AtomicQueue[T]) Dropped() int {
 	return q.worker.Dropped()
 }

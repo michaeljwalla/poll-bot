@@ -76,6 +76,11 @@ func (q *AtomicQueue[T]) Full() bool {
 func (q *AtomicQueue[T]) Empty() bool {
 	return q.worker.Empty()
 }
+func (q *AtomicQueue[T]) Await() {
+	if q.Empty() {
+		q.worker.Subscribe()
+	}
+}
 
 // can no longer push to queue
 func (q *AtomicQueue[T]) Close() {

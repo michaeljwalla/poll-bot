@@ -28,6 +28,7 @@ type worker[T any] struct {
 	queue               *AtomicQueue[T]
 	channel             chan *T
 	awaitUnblockChannel chan byte
+	subscriberChannel   chan byte
 	states              workerStates
 }
 
@@ -50,6 +51,7 @@ func newWorker[T any](queue *AtomicQueue[T], channelSize int, flags int) *worker
 		queue:               queue,
 		channel:             make(chan *T, channelSize),
 		awaitUnblockChannel: make(chan byte),
+		subscriberChannel:   make(chan byte),
 		states: workerStates{
 			active:      &active,
 			channelSize: channelSize,
@@ -80,7 +82,25 @@ func (w *worker[T]) mask(idx uint64) uint64 {
 func (w *worker[T]) Dropped() int {
 	return int(w.states.dropped.Load())
 }
+func (w worker[T]) Subscribe() {
+	<-w.subscriberChannel
+}
+func (w worker[T]) ReleaseSubscribers() {
 
+	select {
+	case _, ok := <-w.subscriberChannel:
+		if ok {
+			close(w.subscriberChannel)
+			break
+		}
+	default:
+		close(w.subscriberChannel)
+	}
+	if !w.states.active.Load() {
+		return
+	}
+	w.subscriberChannel = make(chan byte)
+}
 func (w *worker[T]) Start() {
 	for {
 		if w.Full() && hasFlag(w.states.flags, F_BLOCKFULL) {
@@ -100,12 +120,15 @@ func (w *worker[T]) Start() {
 		tail := w.states.tail.Load()
 		w.queue.data[w.mask(tail)] = next
 		w.states.tail.Store(tail + 1)
+		//
+		w.ReleaseSubscribers()
 	}
 	w.Stop() //idempotent sooo
 }
 func (w *worker[T]) Stop() {
 	w.states.stopper.Do(func() {
 		w.states.active.Store(false)
+		w.ReleaseSubscribers()
 		close(w.awaitUnblockChannel)
 		close(w.channel)
 	})

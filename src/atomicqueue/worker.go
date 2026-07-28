@@ -82,18 +82,28 @@ func (w *worker[T]) mask(idx uint64) uint64 {
 func (w *worker[T]) Dropped() int {
 	return int(w.states.dropped.Load())
 }
-func (w worker[T]) Subscribe() {
+func channelOpen[T any](ch chan T) bool {
+	select {
+	case _, ok := <-ch:
+		if ok {
+			return true
+		}
+		return false
+	default:
+		return true
+	}
+}
+func (w *worker[T]) Subscribe() {
+	if !w.states.active.Load() {
+		return
+	}
+	if !channelOpen(w.subscriberChannel) {
+		w.subscriberChannel = make(chan byte)
+	}
 	<-w.subscriberChannel
 }
-func (w worker[T]) ReleaseSubscribers() {
-
-	select {
-	case _, ok := <-w.subscriberChannel:
-		if ok {
-			close(w.subscriberChannel)
-			break
-		}
-	default:
+func (w *worker[T]) ReleaseSubscribers() {
+	if channelOpen(w.subscriberChannel) {
 		close(w.subscriberChannel)
 	}
 	if !w.states.active.Load() {

@@ -25,33 +25,34 @@ const DATA_PATH = "./data/"
 const LOG_PATH = DATA_PATH + "/logs/"
 const ALIAS_PATH = DATA_PATH + "aliases.json"
 
+var MODE string
+
 var f = fmt.Sprintf
 
 func setupLogger() {
-	lg, err := audit.New(LOG_PATH, LogFlag.Default, audit.LogGroup.INIT)
+	lg, err := audit.New(LOG_PATH+MODE, LogFlag.Default, audit.LogGroup.INIT)
 	if err != nil {
 		log.Fatal(f("Couldn't init logs: %v", err))
 	}
 	logger = lg
+	logger.Add(fmt.Sprintf("Running in '%s' mode", MODE), audit.LogGroup.INIT)
 }
 func setEnvironmentVars() {
 	if err := godotenv.Load(); err != nil {
-		logger.Panic("Couldn't load .env", audit.LogGroup.INIT)
+		log.Fatal("Couldn't load .env", audit.LogGroup.INIT)
 		return
 	}
 
-	tokenHeader := strings.ToUpper(os.Getenv("MODE"))
-	if tokenHeader == "" {
-		tokenHeader = "DEV"
+	MODE = strings.ToUpper(os.Getenv("MODE"))
+	if MODE == "" {
+		MODE = "DEV"
 	}
-	TOKEN = os.Getenv(tokenHeader + "_TOKEN")
+	TOKEN = os.Getenv(MODE + "_TOKENID")
 	if TOKEN == "" {
-		logger.Panic(fmt.Sprintf("No token for mode '%s' (canceled)", tokenHeader), audit.LogGroup.INIT)
+		log.Fatal(fmt.Sprintf("No token for MODE '%s' (canceled)", MODE), audit.LogGroup.INIT)
 		return
-	} else {
-		logger.Add(fmt.Sprintf("Running in '%s' mode", tokenHeader), audit.LogGroup.INIT)
 	}
-	logger.Add("Loaded environment variables", audit.LogGroup.INIT)
+	return
 }
 func setAliases() {
 	if ALIAS_PATH == "" {
@@ -70,18 +71,6 @@ func setAliases() {
 }
 func init() {
 	log.SetFlags(log.Ldate) //only date no time
-	//
-	setupLogger()
-	ok := false
-	defer func() {
-		if !ok {
-			logger.Close()
-		}
-	}()
-	//below here uses logger
-	setEnvironmentVars()
-	setAliases()
-	ok = true
 }
 func persist() {
 	sc := make(chan os.Signal, 1)
@@ -89,8 +78,12 @@ func persist() {
 	<-sc
 }
 func main() {
-	//init()
+	setEnvironmentVars()
+
+	setupLogger()
 	defer logger.Close()
+
+	setAliases()
 	//
 	commands := commands.MainCommands
 	session, err := bot.Start(bot.StartInstructions{

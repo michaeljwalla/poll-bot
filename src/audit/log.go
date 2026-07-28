@@ -84,6 +84,7 @@ func (l *Log) runConsumer() {
 		} else if !l.active.Load() && l.queue.Empty() {
 			break
 		}
+		l.queue.Await()
 		next, err := l.queue.Pop()
 		if err != nil {
 			continue //empty
@@ -187,8 +188,8 @@ func handleError(e error, log *Log, groups ...string) (err error) {
 
 func (l *Log) enqueue(callstack []byte, group string, s any, otherGroups ...string) *ErrorPromise {
 	if !l.active.Load() {
-		log.Println("Log droppped: ", group, otherGroups, s)
-		return nil
+		log.Println("Log dropped: ", group, otherGroups, s)
+		return newErrorPromise(uuid.Nil)
 	}
 	id := uuid.New()
 	promise := newErrorPromise(id)
@@ -205,7 +206,7 @@ func (l *Log) enqueue(callstack []byte, group string, s any, otherGroups ...stri
 	//or else the wrong goroutine will crash
 	if group == LogGroup.PANIC {
 		l.doPanic(entry)
-		return nil
+		return newErrorPromise(uuid.Nil)
 	}
 	l.queue.Push(entry)
 	return promise
@@ -264,18 +265,16 @@ func (l *Log) doAdd(params queueEntry) (err error) {
 	return
 }
 func (l *Log) awaitConsumerOrTimeout(ms int) (timedOut bool) {
-	ok := false
-	go func() {
-		time.Sleep(time.Duration(ms))
-		if !ok {
-			timedOut = true
-			l.consumerSync <- 0
-		}
-	}()
-	<-l.consumerSync
-	ok = true
-	return
+	timeout := time.Duration(ms) * time.Millisecond
+
+	select {
+	case <-l.consumerSync:
+		return false
+	case <-time.After(timeout):
+		return true
+	}
 }
+
 func (l *Log) Close() {
 	if !l.active.Load() {
 		return //idempotent

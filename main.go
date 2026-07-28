@@ -22,7 +22,7 @@ var aliases map[string]string
 var LogFlag = audit.LogFlag
 
 const DATA_PATH = "./data/"
-const LOG_PATH = DATA_PATH + "/logs/"
+const LOG_PATH = DATA_PATH + "logs/"
 const ALIAS_PATH = DATA_PATH + "aliases.json"
 
 var MODE string

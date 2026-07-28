@@ -2,6 +2,7 @@ package atomicqueue
 
 import (
 	"errors"
+	"log"
 	"sync"
 	"sync/atomic"
 )
@@ -19,8 +20,7 @@ func hasFlag(cmp int, f int) bool {
 type workerStates struct {
 	stopper     *sync.Once
 	active      *atomic.Bool
-	empty       *atomic.Bool
-	front, end  *atomic.Int32
+	head, tail  *atomic.Uint64 // ring index is (x & (size-1))
 	dropped     *atomic.Int32
 	channelSize int
 	flags       int
@@ -47,8 +47,6 @@ func flushChannel[T any](ch chan T) {
 func newWorker[T any](queue *AtomicQueue[T], channelSize int, flags int) *worker[T] {
 	active := atomic.Bool{}
 	active.Store(true)
-	empty := atomic.Bool{}
-	empty.Store(true)
 	worker := worker[T]{
 		queue:               queue,
 		channel:             make(chan *T, channelSize),
@@ -57,10 +55,9 @@ func newWorker[T any](queue *AtomicQueue[T], channelSize int, flags int) *worker
 			active:      &active,
 			channelSize: channelSize,
 			flags:       flags,
-			empty:       &empty,
 			stopper:     &sync.Once{},
-			front:       &atomic.Int32{},
-			end:         &atomic.Int32{},
+			head:        &atomic.Uint64{},
+			tail:        &atomic.Uint64{},
 			dropped:     &atomic.Int32{},
 		},
 	}
@@ -70,28 +67,16 @@ func (w *worker[T]) Active() bool {
 	return w.states.active.Load()
 }
 func (w *worker[T]) Length() int {
-	if w.Empty() {
-		return 0
-	}
-
-	front, end := int(w.states.front.Load()), int(w.states.end.Load())
-	if front == end {
-		return int(w.queue.size)
-	}
-
-	if front > end {
-		return w.queue.size - front + end + 1
-	}
-	return int(end-front) + 1
+	return int(w.states.tail.Load() - w.states.head.Load())
 }
 func (w *worker[T]) Full() bool {
-	return w.states.front.Load() == w.states.end.Load() && !w.states.empty.Load()
+	return w.states.tail.Load()-w.states.head.Load() >= uint64(w.queue.size)
 }
 func (w *worker[T]) Empty() bool {
-	return w.states.empty.Load()
+	return w.states.head.Load() == w.states.tail.Load()
 }
-func (w *worker[T]) next(idx int32) int32 {
-	return (idx + 1) & (int32(w.queue.size) - 1)
+func (w *worker[T]) mask(idx uint64) uint64 {
+	return idx & uint64(w.queue.size-1)
 }
 func (w *worker[T]) Dropped() int {
 	return int(w.states.dropped.Load())
@@ -106,19 +91,17 @@ func (w *worker[T]) Start() {
 				break
 			}
 		}
-
 		next, ok := <-w.channel
 		if !ok || !w.states.active.Load() {
+			log.Println("Inactive / closed")
 			break
 		} else if w.Full() {
 			w.states.dropped.Add(1)
 			continue
 		}
-		end := w.states.end.Load()
-		//must increment end afterwards so threads don't read mid write
-		w.queue.data[end] = next
-		w.states.end.Store(w.next(end))
-		w.states.empty.Store(false)
+		tail := w.states.tail.Load()
+		w.queue.data[w.mask(tail)] = next
+		w.states.tail.Store(tail + 1)
 	}
 	w.Stop() //idempotent sooo
 }
@@ -137,14 +120,15 @@ func (w *worker[T]) Push(v *T) error {
 	return nil
 }
 func (w *worker[T]) tryPop(output *T) (success bool, empty bool) {
-	if w.Empty() {
+	head := w.states.head.Load()
+	tail := w.states.tail.Load()
+	if head == tail {
 		empty = true
 		return
 	}
-	idx := w.states.front.Load()
-	val := *w.queue.data[idx]
-	if w.states.front.CompareAndSwap(idx, w.next(idx)) {
-		//won the race
+	val := *w.queue.data[w.mask(head)]
+
+	if w.states.head.CompareAndSwap(head, head+1) {
 		success = true
 		*output = val
 		return

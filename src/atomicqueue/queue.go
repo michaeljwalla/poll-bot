@@ -54,7 +54,7 @@ func (q *AtomicQueue[T]) Push(value T) error {
 }
 func (q *AtomicQueue[T]) Pop() (value T, err error) {
 	v, err := q.worker.Pop()
-	if err != nil {
+	if err == nil {
 		value = *v
 	}
 	return

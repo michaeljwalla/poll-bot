@@ -9,6 +9,7 @@ import (
 	"poll-bot/src/audit"
 	"poll-bot/src/bot"
 	"poll-bot/src/commands"
+	"strings"
 	"syscall"
 
 	"github.com/joho/godotenv"
@@ -39,10 +40,16 @@ func setEnvironmentVars() {
 		return
 	}
 
-	TOKEN = os.Getenv("TOKENID")
+	tokenHeader := strings.ToUpper(os.Getenv("MODE"))
+	if tokenHeader == "" {
+		tokenHeader = "DEV"
+	}
+	TOKEN = os.Getenv(tokenHeader + "_TOKEN")
 	if TOKEN == "" {
-		logger.Panic("TOKENID environment variable is not set", audit.LogGroup.INIT)
+		logger.Panic(fmt.Sprintf("No token for mode '%s' (canceled)", tokenHeader), audit.LogGroup.INIT)
 		return
+	} else {
+		logger.Add(fmt.Sprintf("Running in '%s' mode", tokenHeader), audit.LogGroup.INIT)
 	}
 	logger.Add("Loaded environment variables", audit.LogGroup.INIT)
 }
@@ -63,10 +70,16 @@ func setAliases() {
 }
 func init() {
 	setupLogger()
+	ok := false
+	defer func() {
+		if !ok {
+			logger.Close()
+		}
+	}()
 	//below here uses logger
 	setEnvironmentVars()
 	setAliases()
-
+	ok = true
 }
 func persist() {
 	sc := make(chan os.Signal, 1)

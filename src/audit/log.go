@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"poll-bot/src/atomicqueue"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -15,19 +16,12 @@ import (
 
 // logtype, value, groups
 type queueEntry = struct {
-	Type   string
-	Value  any
-	Groups []string
-	Id     uuid.UUID
-}
-
-func newQueueEntry(t string, v any, g []string) *queueEntry {
-	return &queueEntry{
-		Type:   t,
-		Value:  v,
-		Groups: g,
-		Id:     uuid.New(),
-	}
+	Type      string
+	Value     any
+	Groups    []string
+	Id        uuid.UUID
+	Time      time.Time
+	Callstack []byte //only present in panic entry
 }
 
 type ErrorPromise struct {
@@ -95,12 +89,12 @@ func (l *Log) runConsumer() {
 		}
 		switch next.Type {
 		case LogGroup.PANIC:
-			l.doPanic(next.Value, next.Groups...)
+			l.doPanic(next)
 		case LogGroup.WARN:
-			l.promises[next.Id].ch <- l.doWarn(next.Value, next.Groups...)
+			l.promises[next.Id].ch <- l.doWarn(next)
 			delete(l.promises, next.Id)
 		case LogGroup.LOG:
-			l.promises[next.Id].ch <- l.doAdd(next.Value, next.Groups...)
+			l.promises[next.Id].ch <- l.doAdd(next)
 			delete(l.promises, next.Id)
 		}
 	}
@@ -127,7 +121,6 @@ func New(path string, flags int, groups ...string) (log *Log, err error) {
 		consumerSync: make(chan byte),
 	}
 	go log.runConsumer()
-
 	groups = append(groups, LogGroup.AUDIT)
 	if !hasFlag(flags, LogFlag.WriteFile) {
 		log.Add("Logger Instance Ready", groups...)
@@ -171,10 +164,8 @@ func (l *Log) tryMigrate() (err error) {
 	return
 }
 
-func logFormat(s any, groups ...string) (timeNow string, output string) {
-	timeNow = time.Now().Format("15:04:05")
-	output = fmt.Sprintf("%v %s", FormatGroupings(groups...), s)
-	return
+func logFormat(time time.Time, s any, groups []string) string {
+	return fmt.Sprintf("%s %v %s", time.Format("15:04:05"), FormatGroupings(groups...), s)
 }
 
 // assumes exclusivity; mutates flags on a copy to operate
@@ -193,7 +184,7 @@ func handleError(e error, log *Log, groups ...string) (err error) {
 	return
 }
 
-func (l *Log) enqueue(group string, s any, otherGroups ...string) *ErrorPromise {
+func (l *Log) enqueue(callstack []byte, group string, s any, otherGroups ...string) *ErrorPromise {
 	if !l.active.Load() {
 		log.Println("Log droppped: ", group, otherGroups, s)
 		return newErrorPromise(uuid.Nil)
@@ -202,42 +193,45 @@ func (l *Log) enqueue(group string, s any, otherGroups ...string) *ErrorPromise 
 	promise := newErrorPromise(id)
 	l.promises[id] = promise
 	l.queue.Push(queueEntry{
-		Type:   group,
-		Value:  s,
-		Groups: otherGroups,
-		Id:     id,
+		Type:      group,
+		Value:     s,
+		Groups:    otherGroups,
+		Id:        id,
+		Time:      time.Now(),
+		Callstack: callstack,
 	})
 	return promise
 }
 
 // will not pass errors, always writes to memory
+// also indefinitely halts the current thread
 func (l *Log) Panic(s any, groups ...string) {
-	l.enqueue(LogGroup.PANIC, s, groups...)
+	l.enqueue(debug.Stack(), LogGroup.PANIC, s, groups...).Await()
 }
 func (l *Log) Warn(s any, groups ...string) ErrorPromise {
-	return *l.enqueue(LogGroup.WARN, s, groups...)
+	return *l.enqueue(nil, LogGroup.WARN, s, groups...)
 }
 func (l *Log) Add(s any, groups ...string) ErrorPromise {
-	return *l.enqueue(LogGroup.LOG, s, groups...)
+	return *l.enqueue(nil, LogGroup.LOG, s, groups...)
 }
 
 // should catch with log.close
-func (l *Log) doPanic(s any, groups ...string) {
+func (l *Log) doPanic(params queueEntry) {
 	l.tryMigrate()
-	groups = append(groups, LogGroup.PANIC)
-	timeNow, output := logFormat(s, groups...)
+	output := logFormat(params.Time, params.Value, append(params.Groups, LogGroup.PANIC))
+	// output += fmt.Sprintf("\n\nCaptured Stack Trace:\n%s", params.Callstack)
 	if hasFlag(l.flags, LogFlag.WriteFile) {
-		l.file.WriteString(fmt.Sprintf("%s %s", timeNow, output))
+		l.file.WriteString(output + "\n")
 	}
 	//
+	// fmt.Fprint(os.Stderr, output)
 	log.Panic(output)
 }
-func (l *Log) doWarn(s any, groups ...string) (err error) {
+func (l *Log) doWarn(params queueEntry) (err error) {
 	l.tryMigrate()
-	groups = append(groups, LogGroup.WARN)
-	timeNow, output := logFormat(s, groups...)
+	output := logFormat(params.Time, params.Value, append(params.Groups, LogGroup.WARN))
 	if hasFlag(l.flags, LogFlag.WriteFile) {
-		if _, err = fmt.Fprintf(l.file, "%s %s", timeNow, output); err != nil {
+		if _, err = l.file.WriteString(output + "\n"); err != nil {
 			return handleError(err, l)
 		}
 	}
@@ -247,12 +241,11 @@ func (l *Log) doWarn(s any, groups ...string) (err error) {
 	}
 	return
 }
-func (l *Log) doAdd(s any, groups ...string) (err error) {
+func (l *Log) doAdd(params queueEntry) (err error) {
 	l.tryMigrate()
-	groups = append(groups, LogGroup.LOG)
-	timeNow, output := logFormat(s, groups...)
+	output := logFormat(params.Time, params.Value, append(params.Groups, LogGroup.LOG))
 	if hasFlag(l.flags, LogFlag.WriteFile) {
-		if _, err = fmt.Fprintf(l.file, "%s %s", timeNow, output); err != nil {
+		if _, err = l.file.WriteString(output + "\n"); err != nil {
 			return handleError(err, l)
 		}
 	}

@@ -69,6 +69,8 @@ func setAliases() {
 	logger.Add("Loaded aliases.json", audit.LogGroup.INIT)
 }
 func init() {
+	log.SetFlags(log.Ldate) //only date no time
+	//
 	setupLogger()
 	ok := false
 	defer func() {

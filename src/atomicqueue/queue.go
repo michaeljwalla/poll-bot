@@ -35,7 +35,7 @@ func New[T any](size int, channelSize int, flags int) (queue *AtomicQueue[T], er
 		channelSize = size
 	}
 
-	if hasFlag(flags, F_BLOCKFULL) != hasFlag(flags, F_DROPFULL) {
+	if hasFlag(flags, F_BLOCKFULL) == hasFlag(flags, F_DROPFULL) {
 		err = fmt.Errorf("Specify either F_BLOCKFULL / F_DROPFULL")
 		return
 	}

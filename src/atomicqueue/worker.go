@@ -2,7 +2,6 @@ package atomicqueue
 
 import (
 	"errors"
-	"log"
 	"sync"
 	"sync/atomic"
 )
@@ -93,7 +92,6 @@ func (w *worker[T]) Start() {
 		}
 		next, ok := <-w.channel
 		if !ok || !w.states.active.Load() {
-			log.Println("Inactive / closed")
 			break
 		} else if w.Full() {
 			w.states.dropped.Add(1)

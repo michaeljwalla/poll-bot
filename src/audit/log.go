@@ -22,6 +22,7 @@ type queueEntry = struct {
 	Id        uuid.UUID
 	Time      time.Time
 	Callstack []byte //only present in panic entry
+	Promise   *ErrorPromise
 }
 
 type ErrorPromise struct {
@@ -53,10 +54,10 @@ type iLog interface {
 	Close(s any) (err error)
 }
 type Log struct {
-	active       *atomic.Bool
-	path         string
-	file         *os.File
-	promises     map[uuid.UUID]*ErrorPromise
+	active *atomic.Bool
+	path   string
+	file   *os.File
+	// promises     map[uuid.UUID]*ErrorPromise
 	queue        *atomicqueue.AtomicQueue[queueEntry]
 	consumerSync chan byte
 	date         string
@@ -88,14 +89,14 @@ func (l *Log) runConsumer() {
 			continue //empty
 		}
 		switch next.Type {
-		case LogGroup.PANIC:
-			l.doPanic(next)
+		// case LogGroup.PANIC:
+		// 	l.doPanic(next)
 		case LogGroup.WARN:
-			l.promises[next.Id].ch <- l.doWarn(next)
-			delete(l.promises, next.Id)
+			next.Promise.ch <- l.doWarn(next)
+			// delete(l.promises, next.Id)
 		case LogGroup.LOG:
-			l.promises[next.Id].ch <- l.doAdd(next)
-			delete(l.promises, next.Id)
+			next.Promise.ch <- l.doAdd(next)
+			// delete(l.promises, next.Id)
 		}
 	}
 	// reaches here on a close. signifies done
@@ -113,11 +114,11 @@ func New(path string, flags int, groups ...string) (log *Log, err error) {
 	active := atomic.Bool{}
 	active.Store(true)
 	log = &Log{
-		active:       &active,
-		flags:        flags,
-		date:         date,
-		queue:        queue,
-		promises:     make(map[uuid.UUID]*ErrorPromise),
+		active: &active,
+		flags:  flags,
+		date:   date,
+		queue:  queue,
+		// promises:     make(map[uuid.UUID]*ErrorPromise),
 		consumerSync: make(chan byte),
 	}
 	go log.runConsumer()
@@ -187,19 +188,26 @@ func handleError(e error, log *Log, groups ...string) (err error) {
 func (l *Log) enqueue(callstack []byte, group string, s any, otherGroups ...string) *ErrorPromise {
 	if !l.active.Load() {
 		log.Println("Log droppped: ", group, otherGroups, s)
-		return newErrorPromise(uuid.Nil)
+		return nil
 	}
 	id := uuid.New()
 	promise := newErrorPromise(id)
-	l.promises[id] = promise
-	l.queue.Push(queueEntry{
+	entry := queueEntry{
 		Type:      group,
 		Value:     s,
 		Groups:    otherGroups,
 		Id:        id,
 		Time:      time.Now(),
 		Callstack: callstack,
-	})
+		Promise:   promise,
+	}
+	//this has to halt the current goroutine, so consumer can't call it
+	//or else the wrong goroutine will crash
+	if group == LogGroup.PANIC {
+		l.doPanic(entry)
+		return nil
+	}
+	l.queue.Push(entry)
 	return promise
 }
 

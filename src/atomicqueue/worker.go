@@ -24,34 +24,25 @@ type workerStates struct {
 	channelSize int
 	flags       int
 }
+
 type worker[T any] struct {
 	queue               *AtomicQueue[T]
 	channel             chan *T
-	awaitUnblockChannel chan byte
-	subscriberChannel   chan byte
+	done                chan struct{} // closed exactly once by Stop
+	awaitUnblockChannel chan struct{} // buffered(1); poppers signal writer
+	subscribers         *subscribers
 	states              workerStates
 }
 
-func flushChannel[T any](ch chan T) {
-	for {
-		select {
-		case _, ok := <-ch:
-			if !ok {
-				return // closed
-			}
-		default:
-			return
-		}
-	}
-}
 func newWorker[T any](queue *AtomicQueue[T], channelSize int, flags int) *worker[T] {
 	active := atomic.Bool{}
 	active.Store(true)
-	worker := worker[T]{
+	return &worker[T]{
 		queue:               queue,
 		channel:             make(chan *T, channelSize),
-		awaitUnblockChannel: make(chan byte),
-		subscriberChannel:   make(chan byte),
+		done:                make(chan struct{}),
+		awaitUnblockChannel: make(chan struct{}, 1),
+		subscribers:         newSubscribers(),
 		states: workerStates{
 			active:      &active,
 			channelSize: channelSize,
@@ -62,11 +53,9 @@ func newWorker[T any](queue *AtomicQueue[T], channelSize int, flags int) *worker
 			dropped:     &atomic.Int32{},
 		},
 	}
-	return &worker
 }
-func (w *worker[T]) Active() bool {
-	return w.states.active.Load()
-}
+
+func (w *worker[T]) Active() bool { return w.states.active.Load() }
 func (w *worker[T]) Length() int {
 	return int(w.states.tail.Load() - w.states.head.Load())
 }
@@ -82,74 +71,69 @@ func (w *worker[T]) mask(idx uint64) uint64 {
 func (w *worker[T]) Dropped() int {
 	return int(w.states.dropped.Load())
 }
-func channelOpen[T any](ch chan T) bool {
-	select {
-	case _, ok := <-ch:
-		if ok {
-			return true
-		}
-		return false
-	default:
-		return true
-	}
-}
+
 func (w *worker[T]) Subscribe() {
-	if !w.states.active.Load() {
-		return
-	}
-	if !channelOpen(w.subscriberChannel) {
-		w.subscriberChannel = make(chan byte)
-	}
-	<-w.subscriberChannel
+	w.subscribers.Wait(func() bool {
+		return w.states.active.Load() && w.Empty()
+	})
 }
+
 func (w *worker[T]) ReleaseSubscribers() {
-	if channelOpen(w.subscriberChannel) {
-		close(w.subscriberChannel)
-	}
-	if !w.states.active.Load() {
-		return
-	}
-	w.subscriberChannel = make(chan byte)
+	w.subscribers.Release()
 }
+
 func (w *worker[T]) Start() {
+	defer w.Stop()
 	for {
-		if w.Full() && hasFlag(w.states.flags, F_BLOCKFULL) {
-			_, ok := <-w.awaitUnblockChannel
-			flushChannel(w.awaitUnblockChannel)
-			if !ok {
-				break
+		if hasFlag(w.states.flags, F_BLOCKFULL) {
+			for w.Full() {
+				select {
+				case <-w.awaitUnblockChannel:
+				case <-w.done:
+					return
+				}
 			}
 		}
-		next, ok := <-w.channel
-		if !ok || !w.states.active.Load() {
-			break
-		} else if w.Full() {
+		var next *T
+		select {
+		case next = <-w.channel:
+		case <-w.done:
+			return
+		}
+		if w.Full() {
+			// only reachable under F_DROPFULL
 			w.states.dropped.Add(1)
 			continue
 		}
 		tail := w.states.tail.Load()
 		w.queue.data[w.mask(tail)] = next
 		w.states.tail.Store(tail + 1)
-		//
-		w.ReleaseSubscribers()
+		w.subscribers.Release()
 	}
-	w.Stop() //idempotent sooo
 }
+
 func (w *worker[T]) Stop() {
 	w.states.stopper.Do(func() {
 		w.states.active.Store(false)
-		w.ReleaseSubscribers()
-		close(w.awaitUnblockChannel)
-		close(w.channel)
+		close(w.done)
+		w.subscribers.Release()
 	})
 }
+
 func (w *worker[T]) Push(v *T) error {
-	if !w.states.active.Load() {
-		return errors.New("Empty")
+	select {
+	case <-w.done:
+		return errors.New("closed")
+	default:
 	}
-	w.channel <- v
-	return nil
+	select {
+	case w.channel <- v:
+		return nil
+	case <-w.done:
+		return errors.New("closed")
+	}
 }
+
 func (w *worker[T]) tryPop(output *T) (success bool, empty bool) {
 	head := w.states.head.Load()
 	tail := w.states.tail.Load()
@@ -162,10 +146,17 @@ func (w *worker[T]) tryPop(output *T) (success bool, empty bool) {
 	if w.states.head.CompareAndSwap(head, head+1) {
 		success = true
 		*output = val
+		if hasFlag(w.states.flags, F_BLOCKFULL) {
+			select {
+			case w.awaitUnblockChannel <- struct{}{}:
+			default:
+			}
+		}
 		return
 	}
 	return
 }
+
 func (w *worker[T]) Pop() (value *T, err error) {
 	var out T
 	for {

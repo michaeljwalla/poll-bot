@@ -22,27 +22,24 @@ func New[T any](size int, channelSize int, flags int) (queue *AtomicQueue[T], er
 		err = errors.New("Buffer size / channel size should be nonnegative values")
 		return
 	}
-	if size%2 != 0 {
-		err = fmt.Errorf("Buffer size should be power of two (specify 0 for default %d)", defaultBufferSize)
-		return
-	} else if size == 0 && defaultBufferSize > 0 {
+	if size == 0 {
 		size = defaultBufferSize
-	} else {
-		err = errors.New("Size / default buffer size should be positive")
+	}
+	if size&(size-1) != 0 {
+		err = fmt.Errorf("Buffer size should be power of two (specify 0 for default %d)", defaultBufferSize)
 		return
 	}
 	if channelSize == 0 {
 		channelSize = size
 	}
-
 	if hasFlag(flags, F_BLOCKFULL) == hasFlag(flags, F_DROPFULL) {
 		err = fmt.Errorf("Specify either F_BLOCKFULL / F_DROPFULL")
 		return
 	}
-	//
 	queue = &AtomicQueue[T]{
-		data: make([]*T, size+1),
-		size: size,
+		data:  make([]*T, size),
+		size:  size,
+		flags: flags,
 	}
 	queue.worker = newWorker(queue, channelSize, flags)
 	go queue.worker.Start()
@@ -77,9 +74,7 @@ func (q *AtomicQueue[T]) Empty() bool {
 	return q.worker.Empty()
 }
 func (q *AtomicQueue[T]) Await() {
-	if q.Empty() {
-		q.worker.Subscribe()
-	}
+	q.worker.Subscribe()
 }
 
 // can no longer push to queue

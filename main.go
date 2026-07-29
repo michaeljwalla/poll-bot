@@ -11,8 +11,6 @@ import (
 	"poll-bot/src/commands"
 	"strings"
 	"syscall"
-
-	"github.com/joho/godotenv"
 )
 
 var logger *audit.Log
@@ -38,11 +36,6 @@ func setupLogger() {
 	logger.Add(fmt.Sprintf("Running in '%s' mode", MODE), audit.LogGroup.INIT)
 }
 func setEnvironmentVars() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatal("Couldn't load .env", audit.LogGroup.INIT)
-		return
-	}
-
 	MODE = strings.ToUpper(os.Getenv("MODE"))
 	if MODE == "" {
 		MODE = "DEV"

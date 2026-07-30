@@ -2,4 +2,4 @@
 data/
 .lost/
 build/
-*-run.sh
+/*.sh

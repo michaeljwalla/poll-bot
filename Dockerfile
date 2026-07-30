@@ -10,14 +10,13 @@ COPY main.go .
 COPY src/ ./src/
 RUN CGO_ENABLED=0 go build -o main
 
-# other files
-COPY . .
+COPY docker/img_setup.sh ./
 
 # runner
 FROM alpine:latest
 WORKDIR /root/
-COPY --from=builder /app/main ./
-COPY docker/img_setup.sh ./
-RUN chmod +x ./img_setup.sh && ./img_setup.sh
+COPY --from=builder /app/main /app/img_setup.sh ./
+RUN ./img_setup.sh
+
 
 CMD ["sh", "-c", "MODE=DEV ./main"]

@@ -1,0 +1,15 @@
+#environment
+.env
+.lost/
+
+# created (again) in build process
+build/
+data/
+
+#top level scripts (some of my stuff)
+/*.sh
+
+#unnecessary
+README.md
+Dockerfile
+.dockerignore

@@ -21,18 +21,13 @@ RUN DOWNLOAD_URL=$(curl -sSL \
     && mkdir -p ./bin \
     && tar -xvzf /tmp/release.tar.gz -C ./bin
 
-COPY docker/img_setup.sh ./
-
 # runner
 FROM alpine:latest
-WORKDIR /root/
+WORKDIR /app
 
 ARG REPO="poll-bot"
 ARG TARGET="linux-amd64"
 
 COPY --from=downloader /app/bin/${REPO}-${TARGET}* ./main
-COPY /docker/img_setup.sh ./
-RUN chmod +x ./img_setup.sh && ./img_setup.sh
-
 
 CMD ["./main"]

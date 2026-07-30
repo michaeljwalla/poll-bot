@@ -1,6 +1,13 @@
 services:
   main:
-    build: .
     env_file: .env
+    
+    build:
+      context: .
+      no_cache: true
+    
+    volumes:
+      - ./data:/app/data/
+
     restart: unless-stopped
     image: poll-bot:latest

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -36,7 +37,7 @@ func setupLogger() {
 func setEnvironmentVars() {
 	MODE = strings.ToUpper(os.Getenv("MODE"))
 	if MODE == "" {
-		MODE = "DEV"
+		log.Fatal(errors.New("you should provide a MODE"))
 	}
 	TOKEN = os.Getenv(MODE + "_TOKENID")
 	if TOKEN == "" {

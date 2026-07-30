@@ -12,4 +12,6 @@ data/
 #unnecessary
 README.md
 Dockerfile
+docker-compose.yml
 .dockerignore
+.gitignore

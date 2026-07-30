@@ -1,9 +1,13 @@
-name: lint, build, release docker binary
+name: lint, build, release linux binary
 
 on:
   push:
     branches: [main]
     tags: [v*]
+
+env:
+  TARGET_PLATFORM: linux-amd64
+  BIN_NAME: poll-bot-linux-amd64
 
 jobs:
   lint:
@@ -33,20 +37,23 @@ jobs:
           go-version: "1.26.x"
         
       - name: dependencies
-        run: go mod tidy
+        run: go mod download
         
       - name: build
         env:
           GOOS: linux
           CGO_ENABLED: 0
           GOARCH: amd64
-        run: go build -o main
-
-      - name: provide build artifact
+        run: go build -o ${{ env.BIN_NAME }}
+      
+      - name: compress
+        run: tar -zcvf ${{ env.BIN_NAME }}.tar.gz ${{ env.BIN_NAME }}
+      
+      - name: provide build tarball
         uses: actions/upload-artifact@v4
         with:
-          name: docker-bin
-          path: main
+          name: ${{ env.TARGET_PLATFORM }}-latest
+          path: ${{ env.BIN_NAME }}.tar.gz
           retention-days: 1
 
   release:
@@ -62,13 +69,13 @@ jobs:
       - name: download build artifact
         uses: actions/download-artifact@v4
         with:
-          name: docker-bin
+          name: ${{ env.TARGET_PLATFORM }}-latest
+          path: ${{ env.TARGET_PLATFORM }}
         
       - name: make release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
-          name: "Linux binary auto-release"
-          body: "get with ..."
+          name: ${{ env.TARGET_PLATFORM }} autorelease
           prerelease: true
-          files: main
+          files: ${{env.TARGET_PLATFORM}}/${{ env.BIN_NAME }}*

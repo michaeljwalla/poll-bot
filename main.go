@@ -25,12 +25,10 @@ const ALIAS_PATH = DATA_PATH + "aliases.json"
 
 var MODE string
 
-var f = fmt.Sprintf
-
 func setupLogger() {
 	lg, err := audit.New(LOG_PATH+MODE, LogFlag.Default, audit.LogGroup.INIT)
 	if err != nil {
-		log.Fatal(f("Couldn't init logs: %v", err))
+		log.Fatal(fmt.Errorf("couldn't init logs: %v", err))
 	}
 	logger = lg
 	logger.Add(fmt.Sprintf("Running in '%s' mode", MODE), audit.LogGroup.INIT)
@@ -42,7 +40,7 @@ func setEnvironmentVars() {
 	}
 	TOKEN = os.Getenv(MODE + "_TOKENID")
 	if TOKEN == "" {
-		log.Fatal(fmt.Sprintf("No token for MODE '%s' (canceled)", MODE), audit.LogGroup.INIT)
+		log.Fatal(fmt.Errorf("no token for MODE '%s' (canceled)", MODE))
 		return
 	}
 }
@@ -85,7 +83,7 @@ func main() {
 		TargetAliases: aliases,
 	})
 	if err != nil {
-		logger.Panic(f("Error creating Discord session: %v", err))
+		logger.Panic(fmt.Errorf("error creating Discord session: %v", err))
 		return
 	}
 	defer bot.EndSession(session)

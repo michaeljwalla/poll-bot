@@ -1,17 +1,16 @@
 # poll-bot
-# Dependencies
- - Docker
- - Docker Compose plugin (optional)
- - Internet connection
- - Github
- - Brain
-# Building & Running the Container
-Do both it w/ docker compose:
+## Dependencies
+ - make
+ - Docker / Docker compose
+## Setup
+1. clone repo
+2. setup .env and define `x_TOKENID` where `MODE=X`
+    - ex, `MODE=DEV DEV_TOKENID=...`
+3. done
+## Using the Bot
 ```sh
-docker-compose up -d --build
-```
-Or if you didn't install that:
-```sh
-chmod +x ./docker/build.sh && ./docker/build.sh
-docker run -d --env-file .env --restart unless-stopped --name main main
+make        # build (no cache)
+make up     # start
+make down   # stop
+make logs   # follow output live
 ```

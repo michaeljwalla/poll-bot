@@ -11,7 +11,7 @@ import (
 
 type Commands struct {
 	Identifiers []*discordgo.ApplicationCommand
-	Handlers    map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)
+	Handlers    map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate) error
 }
 
 var DEFAULT_RATING_ANSWERS []string = []string{
@@ -104,16 +104,16 @@ func get_rate_answers(comment_map map[string]*discordgo.ApplicationCommandIntera
 }
 
 // Define the execution handlers for yzouor commands
-var commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-	"ping": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+var commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate) error{
+	"ping": func(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: "Pong, recv. " + strconv.FormatInt(unix.DiffNowEpochMillis(i.ID), 10) + "ms",
 			},
 		})
 	},
-	"rate": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	"rate": func(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 		options := i.ApplicationCommandData().Options
 		optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
 		for _, opt := range options {
@@ -125,7 +125,7 @@ var commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.Interac
 			Question: discordgo.PollMedia{Text: topicOption.StringValue()},
 			Answers:  *get_rate_answers(optionMap),
 		}
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Poll: &poll,

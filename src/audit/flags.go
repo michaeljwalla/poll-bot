@@ -63,14 +63,14 @@ func hasFlag(cmp int, f int) bool {
 }
 func checkFlags(flags int) error {
 	if flags&(LogFlag.WriteFile|LogFlag.WriteMemory) == 0 {
-		return fmt.Errorf("Flag configuration missing Write: %b", flags)
+		return fmt.Errorf("flag configuration missing Write: %b", flags)
 	}
 	mod := flags
 	for flag := range logStrings {
 		mod &= ^flag
 	}
 	if mod != 0 {
-		return fmt.Errorf("Unknown flag configuration: %b", flags)
+		return fmt.Errorf("unknown flag configuration: %b", flags)
 	}
 	return nil
 }

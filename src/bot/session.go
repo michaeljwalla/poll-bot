@@ -72,16 +72,19 @@ func Start(instr StartInstructions) (session *Session, err error) {
 	// set perms "intents" & register gateway handler boilerplate
 	dgSession.Identify.Intents = discordgo.IntentsGuilds
 	dgSession.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		if i.Type == discordgo.InteractionType(discordgo.InteractionContextGuild) {
-			// Handle component interactions or autocomplete here if needed
-		}
+		// if i.Type == discordgo.InteractionType(discordgo.InteractionContextGuild) {
+		// 	// Handle component interactions or autocomplete here if needed
+		// }
 		commandData := i.ApplicationCommandData()
 		if handle, ok := commands.Handlers[commandData.Name]; ok {
 			id := i.Member.User.ID
 			alias := resolveAlias(id, aliases)
 
-			logger.Add(fmt.Sprintf("%v %33s) | %s", id, "("+alias, rebuildCommand(&commandData)), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
-			handle(s, i)
+			cmd := rebuildCommand(&commandData)
+			logger.Add(fmt.Sprintf("%v %33s) | %s", id, "("+alias, cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+			if err := handle(s, i); err != nil {
+				logger.Warn(fmt.Sprintf("While handling %s: %v", rebuildCommand(&commandData), err))
+			}
 		}
 	})
 
@@ -117,7 +120,9 @@ func Start(instr StartInstructions) (session *Session, err error) {
 func EndSession(session *Session) {
 	session.Logger.Add("Ending session...", audit.LogGroup.BOT)
 	defer func() {
-		session.DGSession.Close()
+		if err := session.DGSession.Close(); err != nil {
+			session.Logger.Warn(fmt.Sprintf("Error while closing DGSession: %v", err))
+		}
 		session.Logger.Add("Session ended", audit.LogGroup.BOT)
 	}()
 	// 8. Clean up and remove commands upon shutdown

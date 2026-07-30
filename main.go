@@ -45,7 +45,6 @@ func setEnvironmentVars() {
 		log.Fatal(fmt.Sprintf("No token for MODE '%s' (canceled)", MODE), audit.LogGroup.INIT)
 		return
 	}
-	return
 }
 func setAliases() {
 	if ALIAS_PATH == "" {
@@ -74,7 +73,7 @@ func main() {
 	setEnvironmentVars()
 
 	setupLogger()
-	defer logger.Close()
+	defer logger.Close() // nolint
 
 	setAliases()
 	//

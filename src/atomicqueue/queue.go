@@ -19,21 +19,21 @@ type AtomicQueue[T any] struct {
 // set size->0 for default; set channelSize->0 to equal size
 func New[T any](size int, channelSize int, flags int) (queue *AtomicQueue[T], err error) {
 	if size < 0 || channelSize < 0 {
-		err = errors.New("Buffer size / channel size should be nonnegative values")
+		err = errors.New("buffer size / channel size should be nonnegative values")
 		return
 	}
 	if size == 0 {
 		size = defaultBufferSize
 	}
 	if size&(size-1) != 0 {
-		err = fmt.Errorf("Buffer size should be power of two (specify 0 for default %d)", defaultBufferSize)
+		err = fmt.Errorf("buffer size should be power of two (specify 0 for default %d)", defaultBufferSize)
 		return
 	}
 	if channelSize == 0 {
 		channelSize = size
 	}
 	if hasFlag(flags, F_BLOCKFULL) == hasFlag(flags, F_DROPFULL) {
-		err = fmt.Errorf("Specify either F_BLOCKFULL / F_DROPFULL")
+		err = fmt.Errorf("specify either F_BLOCKFULL / F_DROPFULL")
 		return
 	}
 	queue = &AtomicQueue[T]{

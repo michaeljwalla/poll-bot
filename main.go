@@ -4,16 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"poll-bot/src/audit"
 	"poll-bot/src/bot"
 	"poll-bot/src/commands"
 	"poll-bot/src/version"
-	"regexp"
 	"strings"
 	"syscall"
 )
@@ -72,52 +69,26 @@ func persist() {
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 }
-func checkVersion() error {
+
+func checkForUpdates() {
 	logger.Add(version.Format(), audit.LogGroup.INIT)
-	source := version.Source()
-	switch source {
-	case "Unknown":
-		return errors.New("no repo provided")
-	case "local":
-		return nil
-	}
-
-	logger.Add("Checking for updates...", audit.LogGroup.INIT)
-
-	resp, err := http.Get(source)
+	//
+	fetch, err := version.TryForUpdates()
 	if err != nil {
-		return err
+		logger.Warn(fmt.Sprintf("Failed to check for updates: %v", err), audit.LogGroup.INIT)
 	}
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("%v %v", resp.StatusCode, resp.Body)
+	if fetch == nil {
+		return
 	}
-	defer resp.Body.Close()
-
-	var data string
-	if body, err := io.ReadAll(resp.Body); err != nil {
-		return err
-	} else {
-		data = string(body)
+	//
+	logger.Add("Checking for updates...", audit.LogGroup.INIT)
+	message, err := fetch()
+	if err != nil {
+		logger.Add(fmt.Sprintf("Failed to check for updates: %v", err), audit.LogGroup.INIT)
+	} else if message != "" {
+		logger.Add(message, audit.LogGroup.INIT)
 	}
-	// not making struct for this and not learning go lib for single use
-	re := regexp.MustCompile(`(?s)"tag_name":"([^"]+)",.+"prerelease":(true|false)`)
-	match := re.FindStringSubmatch(data)
-	if match == nil {
-		return errors.New("regex capture failed to read")
-	}
-
-	var out string
-	if version.Version() != match[1] {
-		out = "A newer %srelease (%s) is available."
-	} else {
-		return nil
-	}
-	var preRelease = ""
-	if match[2] == "true" {
-		preRelease = "pre"
-	}
-	logger.Add(fmt.Sprintf(out, preRelease, match[1]), audit.LogGroup.INIT)
-	return nil
+	return
 }
 func main() {
 	if len(os.Args) > 1 {
@@ -135,11 +106,10 @@ func main() {
 	setupLogger()
 	defer logger.Close() // nolint
 
-	if err := checkVersion(); err != nil {
-		logger.Warn(fmt.Sprintf("Couldn't check for updates: %v", err), audit.LogGroup.INIT)
-	}
 	setAliases()
-	//
+
+	checkForUpdates()
+
 	commands := commands.MainCommands
 	session, err := bot.Start(bot.StartInstructions{
 		Token:         TOKEN,

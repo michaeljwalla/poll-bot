@@ -48,7 +48,7 @@ func getUpdateStatus() (message string, err error) {
 		err = fmt.Errorf("%v %v", resp.StatusCode, resp.Body)
 		return
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint
 
 	var data string
 	body, err := io.ReadAll(resp.Body)

@@ -88,7 +88,6 @@ func checkForUpdates() {
 	} else if message != "" {
 		logger.Add(message, audit.LogGroup.INIT)
 	}
-	return
 }
 func main() {
 	if len(os.Args) > 1 {

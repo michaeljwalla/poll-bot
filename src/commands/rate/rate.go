@@ -1,18 +1,12 @@
-package commands
+package rate
 
 import (
 	"fmt"
-	"poll-bot/src/unix"
 	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
-
-type Commands struct {
-	Identifiers []*discordgo.ApplicationCommand
-	Handlers    map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate) error
-}
 
 var DEFAULT_RATING_ANSWERS []string = []string{
 	repStr("⭐", 5),
@@ -23,13 +17,31 @@ var DEFAULT_RATING_ANSWERS []string = []string{
 	"N/A",
 }
 
-// Define your slash commands configuration
-var commands = []*discordgo.ApplicationCommand{
-	{
-		Name:        "ping",
-		Description: "Responds with a pong message",
-	},
-	{
+func repStr(s string, n int) string {
+	builder := strings.Builder{}
+	builder.Grow(len(s) * n)
+	for range n {
+		builder.WriteString(s)
+	}
+	return builder.String()
+}
+
+func get_rate_answers(comment_map map[string]*discordgo.ApplicationCommandInteractionDataOption) *[]discordgo.PollAnswer {
+	answers := make([]discordgo.PollAnswer, len(DEFAULT_RATING_ANSWERS))
+	for i := range 6 {
+		answer := &answers[5-i]
+		answer.Media = &discordgo.PollMedia{Text: DEFAULT_RATING_ANSWERS[5-i]}
+
+		comment, ok := comment_map["c"+strconv.Itoa(i)]
+		if !ok {
+			continue
+		}
+		answer.Media.Text += fmt.Sprintf(" (%s)", comment.StringValue())
+	}
+	return &answers
+}
+func Register(infos *[]*discordgo.ApplicationCommand, callbacks *map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate) error) {
+	*infos = append(*infos, &discordgo.ApplicationCommand{
 		Name:        "rate",
 		Description: "Make a rating poll",
 		Options: []*discordgo.ApplicationCommandOption{
@@ -76,44 +88,9 @@ var commands = []*discordgo.ApplicationCommand{
 				Required:    false,
 			},
 		},
-	},
-}
+	})
 
-func repStr(s string, n int) string {
-	builder := strings.Builder{}
-	builder.Grow(len(s) * n)
-	for range n {
-		builder.WriteString(s)
-	}
-	return builder.String()
-}
-
-func get_rate_answers(comment_map map[string]*discordgo.ApplicationCommandInteractionDataOption) *[]discordgo.PollAnswer {
-	answers := make([]discordgo.PollAnswer, len(DEFAULT_RATING_ANSWERS))
-	for i := range 6 {
-		answer := &answers[5-i]
-		answer.Media = &discordgo.PollMedia{Text: DEFAULT_RATING_ANSWERS[5-i]}
-
-		comment, ok := comment_map["c"+strconv.Itoa(i)]
-		if !ok {
-			continue
-		}
-		answer.Media.Text += fmt.Sprintf(" (%s)", comment.StringValue())
-	}
-	return &answers
-}
-
-// Define the execution handlers for yzouor commands
-var commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate) error{
-	"ping": func(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "Pong, recv. " + strconv.FormatInt(unix.DiffNowEpochMillis(i.ID), 10) + "ms",
-			},
-		})
-	},
-	"rate": func(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	(*callbacks)["rate"] = func(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 		options := i.ApplicationCommandData().Options
 		optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
 		for _, opt := range options {
@@ -132,7 +109,5 @@ var commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.Interac
 				// Flags: discordgo.MessageFlagsEphemeral,
 			},
 		})
-	},
+	}
 }
-
-var MainCommands = &Commands{Identifiers: commands, Handlers: commandHandlers}

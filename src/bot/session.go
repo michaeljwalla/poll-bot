@@ -3,16 +3,15 @@ package bot
 import (
 	"fmt"
 	"poll-bot/src/audit"
-	"poll-bot/src/commands"
 	"strings"
+
+	"poll-bot/src/commands"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-type Commands = commands.Commands
-
 type CommandRegisters struct {
-	Reference *Commands
+	Reference commands.Package
 	DGObjects []*discordgo.ApplicationCommand
 }
 type Session struct {
@@ -25,7 +24,7 @@ type Session struct {
 
 type StartInstructions struct {
 	Token         string
-	Commands      *Commands
+	Commands      commands.Package
 	Logger        *audit.Log
 	TargetAliases map[string]string
 }
@@ -76,7 +75,7 @@ func Start(instr StartInstructions) (session *Session, err error) {
 		// 	// Handle component interactions or autocomplete here if needed
 		// }
 		commandData := i.ApplicationCommandData()
-		if handle, ok := commands.Handlers[commandData.Name]; ok {
+		if handle, ok := (*commands.Handlers)[commandData.Name]; ok {
 			id := i.Member.User.ID
 			alias := resolveAlias(id, aliases)
 
@@ -95,8 +94,8 @@ func Start(instr StartInstructions) (session *Session, err error) {
 	}
 
 	// register slash commands
-	registeredCommands := make([]*discordgo.ApplicationCommand, len(commands.Identifiers))
-	for idx, cmd := range commands.Identifiers {
+	registeredCommands := make([]*discordgo.ApplicationCommand, len(*commands.Identifiers))
+	for idx, cmd := range *commands.Identifiers {
 		rcmd, err := dgSession.ApplicationCommandCreate(dgSession.State.User.ID, "", cmd)
 		if err != nil {
 			logger.Panic(fmt.Sprintf("Cannot create '%v' command: %v", cmd.Name, err), audit.LogGroup.BOT)

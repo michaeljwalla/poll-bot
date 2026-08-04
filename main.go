@@ -109,7 +109,7 @@ func main() {
 
 	checkForUpdates()
 
-	commands := commands.MainCommands
+	commands := commands.CommandPackage
 	session, err := bot.Start(bot.StartInstructions{
 		Token:         TOKEN,
 		Commands:      commands,

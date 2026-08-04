@@ -74,14 +74,17 @@ func persist() {
 }
 func checkVersion() error {
 	logger.Add(version.Format(), audit.LogGroup.INIT)
-
-	if version.Source() == "Unknown" {
-		return errors.New("No repo provided.")
+	source := version.Source()
+	switch source {
+	case "Unknown":
+		return errors.New("no repo provided")
+	case "local":
+		return nil
 	}
 
 	logger.Add("Checking for updates...", audit.LogGroup.INIT)
 
-	resp, err := http.Get(version.Source())
+	resp, err := http.Get(source)
 	if err != nil {
 		return err
 	}

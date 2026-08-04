@@ -44,12 +44,8 @@ jobs:
           GOOS: linux
           CGO_ENABLED: 0
           GOARCH: amd64
-        run: go build -o ${{ env.BIN_NAME }}-${{ github.ref_name }}
-      
-      - name: compress
-        run: tar -zcvf ${{ env.BIN_NAME }}-${{ github.ref_name }}.tar.gz ${{ env.BIN_NAME }}-${{ github.ref_name }}
-      
-      - name: provide build tarball
+        run: go build -o main -ldflags "-X 'poll-bot/src/version.version=${{ github.ref_name }}' -X 'poll-bot/src/version.source=https://api.github.com/repos/michaeljwalla/poll-bot/releases'"
+      - name: provide build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.TARGET_PLATFORM }}-latest

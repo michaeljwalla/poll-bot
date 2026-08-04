@@ -10,6 +10,7 @@ import (
 	"poll-bot/src/audit"
 	"poll-bot/src/bot"
 	"poll-bot/src/commands"
+	"poll-bot/src/version"
 	"strings"
 	"syscall"
 )
@@ -68,14 +69,47 @@ func persist() {
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 }
-func main() {
-	setEnvironmentVars()
 
+func checkForUpdates() {
+	logger.Add(version.Format(), audit.LogGroup.INIT)
+	//
+	fetch, err := version.TryForUpdates()
+	if err != nil {
+		logger.Warn(fmt.Sprintf("Failed to check for updates: %v", err), audit.LogGroup.INIT)
+	}
+	if fetch == nil {
+		return
+	}
+	//
+	logger.Add("Checking for updates...", audit.LogGroup.INIT)
+	message, err := fetch()
+	if err != nil {
+		logger.Add(fmt.Sprintf("Failed to check for updates: %v", err), audit.LogGroup.INIT)
+	} else if message != "" {
+		logger.Add(message, audit.LogGroup.INIT)
+	}
+	return
+}
+func main() {
+	if len(os.Args) > 1 {
+		if os.Args[1] == "--version" || os.Args[1] == "-v" {
+			fmt.Printf("version: %s\nsource:  %s\n", version.Version(), version.Source())
+			os.Exit(0)
+		} else {
+			fmt.Printf("Run with no commands to start the bot.")
+			os.Exit(1)
+		}
+		return
+	}
+
+	setEnvironmentVars()
 	setupLogger()
 	defer logger.Close() // nolint
 
 	setAliases()
-	//
+
+	checkForUpdates()
+
 	commands := commands.MainCommands
 	session, err := bot.Start(bot.StartInstructions{
 		Token:         TOKEN,

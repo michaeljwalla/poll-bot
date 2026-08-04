@@ -25,4 +25,4 @@ logs:
 
 # add env vars and overwrite MODE
 dev: init
-	export $$(grep -v '^#' .env | xargs); MODE=DEV go run .
+	export $$(grep -v '^#' .env | xargs); MODE=DEV go run -ldflags "-X 'poll-bot/src/version.version=dev' -X 'poll-bot/src/version.source=local'" .

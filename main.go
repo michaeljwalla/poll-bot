@@ -4,12 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"poll-bot/src/audit"
 	"poll-bot/src/bot"
 	"poll-bot/src/commands"
+	"poll-bot/src/version"
+	"regexp"
 	"strings"
 	"syscall"
 )
@@ -68,12 +72,69 @@ func persist() {
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 }
-func main() {
-	setEnvironmentVars()
+func checkVersion() error {
+	logger.Add(version.Format(), audit.LogGroup.INIT)
 
+	if version.Source() == "Unknown" {
+		return errors.New("No repo provided.")
+	}
+
+	logger.Add("Checking for updates...", audit.LogGroup.INIT)
+
+	resp, err := http.Get(version.Source())
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("%v %v", resp.StatusCode, resp.Body)
+	}
+	defer resp.Body.Close()
+
+	var data string
+	if body, err := io.ReadAll(resp.Body); err != nil {
+		return err
+	} else {
+		data = string(body)
+	}
+	// not making struct for this and not learning go lib for single use
+	re := regexp.MustCompile(`(?s)"tag_name":"([^"]+)",.+"prerelease":(true|false)`)
+	match := re.FindStringSubmatch(data)
+	if match == nil {
+		return errors.New("regex capture failed to read")
+	}
+
+	var out string
+	if version.Version() != match[1] {
+		out = "A newer %srelease (%s) is available."
+	} else {
+		return nil
+	}
+	var preRelease = ""
+	if match[2] == "true" {
+		preRelease = "pre"
+	}
+	logger.Add(fmt.Sprintf(out, preRelease, match[1]), audit.LogGroup.INIT)
+	return nil
+}
+func main() {
+	if len(os.Args) > 1 {
+		if os.Args[1] == "--version" || os.Args[1] == "-v" {
+			fmt.Printf("version: %s\nsource:  %s\n", version.Version(), version.Source())
+			os.Exit(0)
+		} else {
+			fmt.Printf("Run with no commands to start the bot.")
+			os.Exit(1)
+		}
+		return
+	}
+
+	setEnvironmentVars()
 	setupLogger()
 	defer logger.Close() // nolint
 
+	if err := checkVersion(); err != nil {
+		logger.Warn(fmt.Sprintf("Couldn't check for updates: %v", err), audit.LogGroup.INIT)
+	}
 	setAliases()
 	//
 	commands := commands.MainCommands

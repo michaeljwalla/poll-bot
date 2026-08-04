@@ -33,15 +33,14 @@ jobs:
           go-version: "1.26.x"
         
       - name: dependencies
-        run: go mod tidy
+        run: go mod download
         
       - name: build
         env:
           GOOS: linux
           CGO_ENABLED: 0
           GOARCH: amd64
-        run: go build -o main
-
+        run: go build -o main -ldflags "-X 'poll-bot/src/version.version=${{ github.ref_name }}' -X 'poll-bot/src/version.source=https://api.github.com/repos/michaeljwalla/poll-bot/releases'"
       - name: provide build artifact
         uses: actions/upload-artifact@v4
         with:

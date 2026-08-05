@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"poll-bot/src/audit"
+	"poll-bot/src/authorize"
 	"poll-bot/src/bot"
 	"poll-bot/src/commands"
 	"poll-bot/src/version"
@@ -18,12 +19,14 @@ import (
 var logger *audit.Log
 var TOKEN string
 var aliases map[string]string
+var authorizations map[string]authorize.Rank
 
 var LogFlag = audit.LogFlag
 
 const DATA_PATH = "./data/"
 const LOG_PATH = DATA_PATH + "logs/"
 const ALIAS_PATH = DATA_PATH + "aliases.json"
+const AUTH_PATH = DATA_PATH + "auth.json"
 
 var MODE string
 
@@ -60,6 +63,21 @@ func setAliases() {
 		return
 	}
 	logger.Add("Loaded aliases.json", audit.LogGroup.INIT)
+}
+func setAuthorizations() {
+	if AUTH_PATH == "" {
+		return
+	}
+	data, err := os.OpenFile(AUTH_PATH, os.O_RDONLY, 0644)
+	if err != nil {
+		logger.Panic("AUTH_PATH provided but failed to load.", audit.LogGroup.INIT)
+		return
+	}
+	if err := json.NewDecoder(data).Decode(&authorizations); err != nil {
+		logger.Panic(fmt.Sprintf("Couldn't get authentications: %v", err), audit.LogGroup.INIT)
+		return
+	}
+	logger.Add("Loaded authorizations.json", audit.LogGroup.INIT)
 }
 func init() {
 	log.SetFlags(log.Ldate) //only date no time
@@ -106,6 +124,7 @@ func main() {
 	defer logger.Close() // nolint
 
 	setAliases()
+	setAuthorizations()
 
 	checkForUpdates()
 

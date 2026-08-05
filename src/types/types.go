@@ -1,0 +1,42 @@
+package types
+
+import (
+	"poll-bot/src/audit"
+	"poll-bot/src/authorize"
+
+	"github.com/bwmarrin/discordgo"
+)
+
+type CommandMetadata struct {
+	MinTrustLevel authorize.Rank
+}
+type EventCallback = func(s *discordgo.Session, i *discordgo.InteractionCreate) error
+
+type CommandInfo struct {
+	DGInfo   *discordgo.ApplicationCommand
+	Metadata CommandMetadata
+	Callback EventCallback
+}
+type BotCommandPackage struct {
+	Handles *map[string]CommandInfo
+}
+
+type SessionCommandRegisters struct {
+	Reference BotCommandPackage
+	DGObjects []*discordgo.ApplicationCommand
+}
+type Session struct {
+	DGSession *discordgo.Session
+	Registers SessionCommandRegisters
+	//
+	Logger        *audit.Log
+	TargetAliases map[string]string
+}
+
+type StartInstructions struct {
+	Token          string
+	Commands       BotCommandPackage
+	Logger         *audit.Log
+	TargetAliases  map[string]string
+	Authorizations map[string]authorize.Rank
+}

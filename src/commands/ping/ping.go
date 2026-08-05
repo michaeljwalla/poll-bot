@@ -1,25 +1,37 @@
 package ping
 
 import (
+	"poll-bot/src/authorize"
+	"poll-bot/src/types"
 	"poll-bot/src/unix"
 	"strconv"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-// map is already reference-like but just for continuity
-func Register(infos *[]*discordgo.ApplicationCommand, callbacks *map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate) error) {
-	*infos = append(*infos, &discordgo.ApplicationCommand{
-		Name:        "ping",
-		Description: "Responds with a pong message",
-	})
+type CommandInfo = types.CommandInfo
+type EventCallback = types.EventCallback
 
-	(*callbacks)["ping"] = func(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "Pong, recv. " + strconv.FormatInt(unix.DiffNowEpochMillis(i.ID), 10) + "ms",
-			},
-		})
+var metadata = types.CommandMetadata{
+	MinTrustLevel: authorize.DEFAULT,
+}
+
+// map is already reference-like but just for continuity
+func Register(handles *map[string]CommandInfo) {
+	(*handles)["ping"] = CommandInfo{
+		DGInfo: &discordgo.ApplicationCommand{
+			Name:        "ping",
+			Description: "Responds with a pong message",
+		},
+		Metadata: metadata,
+		Callback: func(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Pong, recv. " + strconv.FormatInt(unix.DiffNowEpochMillis(i.ID), 10) + "ms",
+				},
+			})
+		},
 	}
+
 }

@@ -3,31 +3,16 @@ package bot
 import (
 	"fmt"
 	"poll-bot/src/audit"
+	"poll-bot/src/authorize"
+	"poll-bot/src/types"
 	"strings"
-
-	"poll-bot/src/commands"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-type CommandRegisters struct {
-	Reference commands.Package
-	DGObjects []*discordgo.ApplicationCommand
-}
-type Session struct {
-	DGSession *discordgo.Session
-	Registers CommandRegisters
-	//
-	Logger        *audit.Log
-	TargetAliases map[string]string
-}
-
-type StartInstructions struct {
-	Token         string
-	Commands      commands.Package
-	Logger        *audit.Log
-	TargetAliases map[string]string
-}
+type StartInstructions = types.StartInstructions
+type Session = types.Session
+type CommandRegisters = types.SessionCommandRegisters
 
 func resolveAlias(s string, as map[string]string) string {
 	if value, ok := as[s]; ok {
@@ -61,7 +46,7 @@ func rebuildCommand(c *discordgo.ApplicationCommandInteractionData) string {
 
 // 2. Initialize a new Discord
 func Start(instr StartInstructions) (session *Session, err error) {
-	token, commands, logger, aliases := instr.Token, instr.Commands, instr.Logger, instr.TargetAliases
+	token, handles, logger, aliases, auth := instr.Token, instr.Commands.Handles, instr.Logger, instr.TargetAliases, instr.Authorizations
 	dgSession, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return
@@ -75,13 +60,21 @@ func Start(instr StartInstructions) (session *Session, err error) {
 		// 	// Handle component interactions or autocomplete here if needed
 		// }
 		commandData := i.ApplicationCommandData()
-		if handle, ok := (*commands.Handlers)[commandData.Name]; ok {
+		if handle, ok := (*handles)[commandData.Name]; ok {
 			id := i.Member.User.ID
-			alias := resolveAlias(id, aliases)
 
+			alias := resolveAlias(id, aliases)
 			cmd := rebuildCommand(&commandData)
-			logger.Add(fmt.Sprintf("%v %33s) | %s", id, "("+alias, cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
-			if err := handle(s, i); err != nil {
+			var callback types.EventCallback
+			if !authorize.CanUse(id, handle.Metadata.MinTrustLevel, auth) {
+				logger.Add(fmt.Sprintf("%v %33s) %02d❌| %s", id, "("+alias, authorize.GetRank(id, auth), cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+				callback = nil // TODO
+			} else {
+				logger.Add(fmt.Sprintf("%v %33s) %02d✅| %s", id, "("+alias, authorize.GetRank(id, auth), cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+				callback = handle.Callback
+			}
+
+			if err := callback(s, i); err != nil {
 				logger.Warn(fmt.Sprintf("While handling %s: %v", rebuildCommand(&commandData), err))
 			}
 		}
@@ -94,19 +87,21 @@ func Start(instr StartInstructions) (session *Session, err error) {
 	}
 
 	// register slash commands
-	registeredCommands := make([]*discordgo.ApplicationCommand, len(*commands.Identifiers))
-	for idx, cmd := range *commands.Identifiers {
-		rcmd, err := dgSession.ApplicationCommandCreate(dgSession.State.User.ID, "", cmd)
+	registeredCommands := make([]*discordgo.ApplicationCommand, len(*handles))
+	cur := 0
+	for _, cmd := range *handles {
+		rcmd, err := dgSession.ApplicationCommandCreate(dgSession.State.User.ID, "", cmd.DGInfo)
 		if err != nil {
-			logger.Panic(fmt.Sprintf("Cannot create '%v' command: %v", cmd.Name, err), audit.LogGroup.BOT)
+			logger.Panic(fmt.Sprintf("Cannot create '%v' command: %v", cmd.DGInfo.Name, err), audit.LogGroup.BOT)
 		}
-		registeredCommands[idx] = rcmd
+		registeredCommands[cur] = rcmd
+		cur++
 	}
 
 	session = &Session{
 		DGSession: dgSession,
 		Registers: CommandRegisters{
-			Reference: commands,
+			Reference: types.BotCommandPackage{Handles: handles},
 			DGObjects: registeredCommands,
 		},
 		Logger:        logger,

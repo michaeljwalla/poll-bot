@@ -25,9 +25,6 @@ RUN DOWNLOAD_URL=$(curl -sSL \
 FROM alpine:latest
 WORKDIR /app
 
-ARG REPO="poll-bot"
-ARG TARGET="linux-amd64"
-
-COPY --from=downloader /app/bin/${REPO}-${TARGET}* ./main
+COPY --from=downloader /app/bin/main ./main
 
 CMD ["./main"]

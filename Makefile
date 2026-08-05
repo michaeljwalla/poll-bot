@@ -9,7 +9,7 @@ init:
 	fi
 	mkdir -p ./data/logs/
 	[ -f ./data/aliases.json ] || echo '{}' > ./data/aliases.json 
-	[ -f ./data/aliases.json ] || echo '{}' > ./data/permissions.json 
+	[ -f ./data/auth.json ] || echo '{}' > ./data/auth.json 
 
 build: init
 	docker compose build

@@ -42,6 +42,7 @@ func SetFile(auth AuthorizedTable) error {
 	return json.NewEncoder(file).Encode(auth)
 }
 
+// TODO centralize singleton properly
 func PermissionsErrorIntercept(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,

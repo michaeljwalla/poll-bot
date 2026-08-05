@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"poll-bot/src/aliases"
 	"poll-bot/src/audit"
 	"poll-bot/src/authorize"
 	"poll-bot/src/bot"
@@ -18,7 +19,7 @@ import (
 
 var logger *audit.Log
 var TOKEN string
-var aliases map[string]string
+var aliasedUsers = &aliases.AliasTable
 var authorizations = &authorize.AuthTable
 
 var LogFlag = audit.LogFlag
@@ -58,10 +59,11 @@ func setAliases() {
 		logger.Warn("ALIAS_PATH provided but failed to load.", audit.LogGroup.INIT)
 		return
 	}
-	if err := json.NewDecoder(data).Decode(&aliases); err != nil {
+	if err := json.NewDecoder(data).Decode(&aliasedUsers); err != nil {
 		logger.Warn(fmt.Sprintf("Couldn't get aliases: %v", err), audit.LogGroup.INIT)
 		return
 	}
+	aliases.SetGlobalPath(ALIAS_PATH)
 	logger.Add("Loaded aliases.json", audit.LogGroup.INIT)
 }
 func setAuthorizations() {
@@ -134,7 +136,7 @@ func main() {
 		Token:          TOKEN,
 		Commands:       commands,
 		Logger:         logger,
-		TargetAliases:  aliases,
+		TargetAliases:  aliases.AliasTable,
 		Authorizations: authorize.AuthTable,
 	})
 	if err != nil {

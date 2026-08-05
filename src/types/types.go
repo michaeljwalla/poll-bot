@@ -1,6 +1,7 @@
 package types
 
 import (
+	"poll-bot/src/aliases"
 	"poll-bot/src/audit"
 	"poll-bot/src/authorize"
 
@@ -37,6 +38,6 @@ type StartInstructions struct {
 	Token          string
 	Commands       BotCommandPackage
 	Logger         *audit.Log
-	TargetAliases  map[string]string
+	TargetAliases  aliases.AliasedTable
 	Authorizations authorize.AuthorizedTable
 }

@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"poll-bot/src/aliases"
 	"poll-bot/src/authorize"
+	"poll-bot/src/commands/alias"
 	"poll-bot/src/commands/modrank"
 	"poll-bot/src/commands/ping"
 	"poll-bot/src/commands/rank"
@@ -23,4 +25,5 @@ func init() {
 	rate.Register(&handles)
 	rank.Register(&handles, &authorize.AuthTable)
 	modrank.Register(&handles, &authorize.AuthTable)
+	alias.Register(&handles, &aliases.AliasTable)
 }

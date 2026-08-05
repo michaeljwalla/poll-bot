@@ -38,5 +38,5 @@ type StartInstructions struct {
 	Commands       BotCommandPackage
 	Logger         *audit.Log
 	TargetAliases  map[string]string
-	Authorizations map[string]authorize.Rank
+	Authorizations authorize.AuthorizedTable
 }

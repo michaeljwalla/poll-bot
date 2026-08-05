@@ -68,7 +68,7 @@ func Start(instr StartInstructions) (session *Session, err error) {
 			var callback types.EventCallback
 			if !authorize.CanUse(id, handle.Metadata.MinTrustLevel, auth) {
 				logger.Add(fmt.Sprintf("%v %33s) %02d❌| %s", id, "("+alias, authorize.GetRank(id, auth), cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
-				callback = nil // TODO
+				callback = authorize.PermissionsErrorIntercept // TODO
 			} else {
 				logger.Add(fmt.Sprintf("%v %33s) %02d✅| %s", id, "("+alias, authorize.GetRank(id, auth), cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
 				callback = handle.Callback

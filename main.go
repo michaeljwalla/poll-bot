@@ -19,7 +19,7 @@ import (
 var logger *audit.Log
 var TOKEN string
 var aliases map[string]string
-var authorizations map[string]authorize.Rank
+var authorizations = &authorize.AuthTable
 
 var LogFlag = audit.LogFlag
 
@@ -77,6 +77,7 @@ func setAuthorizations() {
 		logger.Panic(fmt.Sprintf("Couldn't get authentications: %v", err), audit.LogGroup.INIT)
 		return
 	}
+	authorize.SetGlobalPath(AUTH_PATH)
 	logger.Add("Loaded authorizations.json", audit.LogGroup.INIT)
 }
 func init() {
@@ -130,10 +131,11 @@ func main() {
 
 	commands := commands.CommandPackage
 	session, err := bot.Start(bot.StartInstructions{
-		Token:         TOKEN,
-		Commands:      commands,
-		Logger:        logger,
-		TargetAliases: aliases,
+		Token:          TOKEN,
+		Commands:       commands,
+		Logger:         logger,
+		TargetAliases:  aliases,
+		Authorizations: authorize.AuthTable,
 	})
 	if err != nil {
 		logger.Panic(fmt.Errorf("error creating Discord session: %v", err))

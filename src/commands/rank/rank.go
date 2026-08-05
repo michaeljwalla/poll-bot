@@ -42,11 +42,11 @@ func Register(handles *map[string]CommandInfo, auth *authorize.AuthorizedTable) 
 			if uSelect, ok := optionMap["user"]; ok {
 				user := uSelect.UserValue(s)
 				rank := authorize.GetRank(user.ID, *auth)
-				message = fmt.Sprintf("`%s`'s rank level is `%02d`", user.GlobalName, rank)
+				message = fmt.Sprintf("**%s**'s rank level is `%02d/%s`", user.GlobalName, rank, authorize.Stringify(rank))
 			} else {
 				uid := i.Member.User.ID
 				rank := authorize.GetRank(uid, *auth)
-				message = fmt.Sprintf("Your rank level is `%02d`", rank)
+				message = fmt.Sprintf("Your rank level is `%02d/%s`", rank, authorize.Stringify(rank))
 			}
 			//
 			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{

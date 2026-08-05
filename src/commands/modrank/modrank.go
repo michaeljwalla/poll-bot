@@ -1,0 +1,97 @@
+package modrank
+
+import (
+	"errors"
+	"fmt"
+	"poll-bot/src/authorize"
+	"poll-bot/src/types"
+
+	"github.com/bwmarrin/discordgo"
+)
+
+type CommandInfo = types.CommandInfo
+type EventCallback = types.EventCallback
+
+var metadata = types.CommandMetadata{
+	MinTrustLevel: authorize.PROMOTER,
+}
+
+var rankChoices = make([]*discordgo.ApplicationCommandOptionChoice, authorize.NUM_RANKS)
+
+func init() {
+	for i := range authorize.NUM_RANKS {
+		rankChoices[i] = &discordgo.ApplicationCommandOptionChoice{
+			Name:  authorize.Stringify(authorize.Rank(i)),
+			Value: i,
+		}
+	}
+}
+
+// map is already reference-like but just for continuity
+func Register(handles *map[string]CommandInfo, auth *authorize.AuthorizedTable) {
+	(*handles)["modrank"] = CommandInfo{
+		DGInfo: &discordgo.ApplicationCommand{
+			Name:        "modrank",
+			Description: "modify user rank",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionUser,
+					Name:        "user",
+					Description: "Who to update",
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Name:        "rank",
+					Description: "rank to set (cannot be >= your own)",
+					Required:    true,
+					Choices:     rankChoices,
+				},
+			},
+		},
+		Metadata: metadata,
+		Callback: func(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+			options := i.ApplicationCommandData().Options
+			optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
+			for _, opt := range options {
+				optionMap[opt.Name] = opt
+			}
+
+			//
+			var user *discordgo.User
+			if uSelect, ok := optionMap["user"]; ok {
+				user = uSelect.UserValue(s)
+			} else {
+				return errors.New("couldn't get user field to set.")
+			}
+			if user == nil {
+				return errors.New("Couldn't fetch user (nil)")
+			}
+			var rank authorize.Rank
+			if rSelect, ok := optionMap["rank"]; ok {
+				rank = authorize.Rank(rSelect.IntValue())
+			}
+			rankStr := authorize.Stringify(rank)
+
+			var message string
+			senderRank := authorize.GetRank(i.Member.User.ID, *auth)
+			if rankStr == "UNKNOWN" {
+				message = "I don't know what rank that is."
+			} else if rank >= senderRank || senderRank <= authorize.GetRank(user.ID, *auth) {
+				message = "You can't rank someone higher than or equal to yourself."
+			} else {
+				authorize.SetRank(user.ID, rank, *auth)
+				authorize.SetFile(*auth)
+				message = fmt.Sprintf("Set `%s`'s rank to %s", user.GlobalName, rankStr)
+			}
+			//
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: message,
+				},
+			})
+		},
+	}
+
+}

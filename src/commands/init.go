@@ -2,6 +2,7 @@ package commands
 
 import (
 	"poll-bot/src/authorize"
+	"poll-bot/src/commands/modrank"
 	"poll-bot/src/commands/ping"
 	"poll-bot/src/commands/rank"
 	"poll-bot/src/commands/rate"
@@ -21,4 +22,5 @@ func init() {
 	ping.Register(&handles)
 	rate.Register(&handles)
 	rank.Register(&handles, &authorize.AuthTable)
+	modrank.Register(&handles, &authorize.AuthTable)
 }

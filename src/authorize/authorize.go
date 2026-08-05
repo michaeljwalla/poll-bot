@@ -1,12 +1,14 @@
 package authorize
 
-type AuthTable map[string]Rank
+type AuthorizedTable map[string]Rank
 
-func CanUse(uid string, rank Rank, auth AuthTable) bool {
+var AuthTable = AuthorizedTable{}
+
+func CanUse(uid string, rank Rank, auth AuthorizedTable) bool {
 	return GetRank(uid, auth) >= rank
 }
 
-func GetRank(uid string, auth AuthTable) Rank {
+func GetRank(uid string, auth AuthorizedTable) Rank {
 	userRank, ok := auth[uid]
 	if !ok {
 		userRank = DEFAULT

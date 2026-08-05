@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"poll-bot/src/authorize"
 	"poll-bot/src/commands/ping"
+	"poll-bot/src/commands/rank"
 	"poll-bot/src/commands/rate"
 	"poll-bot/src/types"
 )
@@ -18,4 +20,5 @@ var CommandPackage = types.BotCommandPackage{
 func init() {
 	ping.Register(&handles)
 	rate.Register(&handles)
+	rank.Register(&handles, &authorize.AuthTable)
 }

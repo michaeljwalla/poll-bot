@@ -62,10 +62,10 @@ func Register(handles *map[string]CommandInfo, auth *authorize.AuthorizedTable) 
 			if uSelect, ok := optionMap["user"]; ok {
 				user = uSelect.UserValue(s)
 			} else {
-				return errors.New("couldn't get user field to set.")
+				return errors.New("couldn't get user field to set")
 			}
 			if user == nil {
-				return errors.New("Couldn't fetch user (nil)")
+				return errors.New("couldn't fetch user (nil)")
 			}
 			var rank authorize.Rank
 			if rSelect, ok := optionMap["rank"]; ok {
@@ -81,7 +81,9 @@ func Register(handles *map[string]CommandInfo, auth *authorize.AuthorizedTable) 
 				message = "You can't rank someone higher than or equal to yourself."
 			} else {
 				authorize.SetRank(user.ID, rank, *auth)
-				authorize.SetFile(*auth)
+				if err := authorize.SetFile(*auth); err != nil {
+					return nil
+				}
 				message = fmt.Sprintf("Set `%s`'s rank to %s", user.GlobalName, rankStr)
 			}
 			//

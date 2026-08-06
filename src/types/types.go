@@ -18,8 +18,11 @@ type CommandInfo struct {
 	Metadata CommandMetadata
 	Callback EventCallback
 }
+
 type BotCommandPackage struct {
 	Handles *map[string]CommandInfo
+	Aliases *aliases.AliasTable
+	Auth    *authorize.AuthTable
 }
 
 type SessionCommandRegisters struct {
@@ -35,9 +38,7 @@ type Session struct {
 }
 
 type StartInstructions struct {
-	Token          string
-	Commands       BotCommandPackage
-	Logger         *audit.Log
-	TargetAliases  aliases.AliasedTable
-	Authorizations authorize.AuthorizedTable
+	Token    string
+	Commands *BotCommandPackage
+	Logger   *audit.Log
 }

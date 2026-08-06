@@ -49,8 +49,8 @@ func get_rate_answers(comment_map map[string]*discordgo.ApplicationCommandIntera
 	}
 	return &answers
 }
-func Register(handles *map[string]CommandInfo) {
-	(*handles)["rate"] = CommandInfo{
+func Register(bcp *types.BotCommandPackage) {
+	(*bcp.Handles)["rate"] = CommandInfo{
 		DGInfo: &discordgo.ApplicationCommand{
 			Name:        "rate",
 			Description: "Make a rating poll",

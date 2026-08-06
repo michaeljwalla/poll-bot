@@ -1,48 +1,44 @@
 package authorize
 
 import (
-	"encoding/json"
-	"os"
+	fd "poll-bot/src/filedict"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-type AuthorizedTable map[string]Rank
-
-var AuthTable = AuthorizedTable{}
-var path string
-
-func SetGlobalPath(toPath string) {
-	path = toPath
+type AuthTable struct {
+	data *fd.FileDict[string, Rank]
 }
 
-func CanUse(uid string, rank Rank, auth AuthorizedTable) bool {
-	return GetRank(uid, auth) >= rank
+func New(path string) (*AuthTable, error) {
+	table, err := fd.New[string, Rank](path)
+	if err != nil {
+		return nil, err
+	}
+	return &AuthTable{
+		data: table,
+	}, nil
 }
 
-func GetRank(uid string, auth AuthorizedTable) Rank {
-	userRank, ok := auth[uid]
+func (table *AuthTable) CanUse(uid string, rank Rank) bool {
+	return table.GetRank(uid) >= rank
+}
+
+func (table *AuthTable) GetRank(uid string) Rank {
+	userRank, ok := table.data.Get(uid)
 	if !ok {
 		userRank = DEFAULT
 	}
 	return userRank
 }
 
-// maps are referential
-func SetRank(uid string, rank Rank, auth AuthorizedTable) {
-	auth[uid] = rank
+func (table *AuthTable) SetRank(uid string, rank Rank) error {
+	return table.data.Set(uid, rank)
 }
 
-func SetFile(auth AuthorizedTable) error {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close() //nolint
-	return json.NewEncoder(file).Encode(auth)
-}
+func (table *AuthTable) Write() error { return table.data.SyncWrite() }
+func (table *AuthTable) Read() error  { return table.data.SyncRead() }
 
-// TODO centralize singleton properly
 func PermissionsErrorIntercept(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,

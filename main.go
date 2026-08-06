@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -17,70 +16,60 @@ import (
 	"syscall"
 )
 
-var logger *audit.Log
-var TOKEN string
-var aliasedUsers = &aliases.AliasTable
-var authorizations = &authorize.AuthTable
+// some globals
+var (
+	logger *audit.Log
+)
 
-var LogFlag = audit.LogFlag
+var (
+	LogFlag  = audit.LogFlag
+	LogGroup = audit.LogGroup
+)
 
-const DATA_PATH = "./data/"
-const LOG_PATH = DATA_PATH + "logs/"
-const ALIAS_PATH = DATA_PATH + "aliases.json"
-const AUTH_PATH = DATA_PATH + "auth.json"
+const (
+	DATA_PATH  = "./data/"
+	LOG_PATH   = DATA_PATH + "logs/"
+	ALIAS_PATH = DATA_PATH + "aliases.json"
+	AUTH_PATH  = DATA_PATH + "auth.json"
+)
 
-var MODE string
+func setEnvironmentVars() (token string, mode string) {
+	mode = strings.ToUpper(os.Getenv("MODE"))
+	if mode == "" {
+		log.Fatal(errors.New("you should provide a MODE"))
+	}
+	token = os.Getenv(mode + "_TOKENID")
+	if token == "" {
+		log.Fatal(fmt.Errorf("no token for MODE '%s' (canceled)", mode))
+		return
+	}
+	return
+}
 
-func setupLogger() {
-	lg, err := audit.New(LOG_PATH+MODE, LogFlag.Default, audit.LogGroup.INIT)
+func setupLogger(mode string) {
+	lg, err := audit.New(LOG_PATH+mode, LogFlag.Default, audit.LogGroup.INIT)
 	if err != nil {
 		log.Fatal(fmt.Errorf("couldn't init logs: %v", err))
 	}
 	logger = lg
-	logger.Add(fmt.Sprintf("Running in '%s' mode", MODE), audit.LogGroup.INIT)
+	logger.Add(fmt.Sprintf("Running in '%s' mode", mode), audit.LogGroup.INIT)
 }
-func setEnvironmentVars() {
-	MODE = strings.ToUpper(os.Getenv("MODE"))
-	if MODE == "" {
-		log.Fatal(errors.New("you should provide a MODE"))
-	}
-	TOKEN = os.Getenv(MODE + "_TOKENID")
-	if TOKEN == "" {
-		log.Fatal(fmt.Errorf("no token for MODE '%s' (canceled)", MODE))
-		return
-	}
-}
-func setAliases() {
-	if ALIAS_PATH == "" {
-		return
-	}
-	data, err := os.OpenFile(ALIAS_PATH, os.O_RDONLY, 0644)
+
+func setAliases() *aliases.AliasTable {
+	table, err := aliases.New(ALIAS_PATH)
 	if err != nil {
-		logger.Warn("ALIAS_PATH provided but failed to load.", audit.LogGroup.INIT)
-		return
+		logger.Panic(fmt.Sprintf("Couldn't get aliases: %v", err), audit.LogGroup.INIT)
+		return nil
 	}
-	if err := json.NewDecoder(data).Decode(&aliasedUsers); err != nil {
-		logger.Warn(fmt.Sprintf("Couldn't get aliases: %v", err), audit.LogGroup.INIT)
-		return
-	}
-	aliases.SetGlobalPath(ALIAS_PATH)
-	logger.Add("Loaded aliases.json", audit.LogGroup.INIT)
+	return table
 }
-func setAuthorizations() {
-	if AUTH_PATH == "" {
-		return
-	}
-	data, err := os.OpenFile(AUTH_PATH, os.O_RDONLY, 0644)
+func setAuth() *authorize.AuthTable {
+	table, err := authorize.New(ALIAS_PATH)
 	if err != nil {
-		logger.Panic("AUTH_PATH provided but failed to load.", audit.LogGroup.INIT)
-		return
+		logger.Panic(fmt.Sprintf("Couldn't get auth: %v", err), audit.LogGroup.INIT)
+		return nil
 	}
-	if err := json.NewDecoder(data).Decode(&authorizations); err != nil {
-		logger.Panic(fmt.Sprintf("Couldn't get authentications: %v", err), audit.LogGroup.INIT)
-		return
-	}
-	authorize.SetGlobalPath(AUTH_PATH)
-	logger.Add("Loaded authorizations.json", audit.LogGroup.INIT)
+	return table
 }
 func init() {
 	log.SetFlags(log.Ldate) //only date no time
@@ -122,22 +111,20 @@ func main() {
 		return
 	}
 
-	setEnvironmentVars()
-	setupLogger()
+	token, mode := setEnvironmentVars()
+	setupLogger(mode)
 	defer logger.Close() // nolint
-
-	setAliases()
-	setAuthorizations()
 
 	checkForUpdates()
 
-	commands := commands.CommandPackage
+	commands := commands.Register(commands.RegisterReqs{
+		Aliases: setAliases(),
+		Auth:    setAuth(),
+	})
 	session, err := bot.Start(bot.StartInstructions{
-		Token:          TOKEN,
-		Commands:       commands,
-		Logger:         logger,
-		TargetAliases:  aliases.AliasTable,
-		Authorizations: authorize.AuthTable,
+		Token:    token,
+		Commands: commands,
+		Logger:   logger,
 	})
 	if err != nil {
 		logger.Panic(fmt.Errorf("error creating Discord session: %v", err))

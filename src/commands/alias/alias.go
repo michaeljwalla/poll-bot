@@ -3,7 +3,6 @@ package alias
 import (
 	"errors"
 	"fmt"
-	"poll-bot/src/aliases"
 	"poll-bot/src/authorize"
 	"poll-bot/src/types"
 	"regexp"
@@ -25,8 +24,9 @@ func failedFormatting(s string) bool {
 }
 
 // map is already reference-like but just for continuity
-func Register(handles *map[string]CommandInfo, aliasTable *aliases.AliasedTable) {
-	(*handles)["alias"] = CommandInfo{
+func Register(bcp *types.BotCommandPackage) {
+	table := bcp.Aliases
+	(*bcp.Handles)["alias"] = CommandInfo{
 		DGInfo: &discordgo.ApplicationCommand{
 			Name:        "alias",
 			Description: "modify user rank",
@@ -72,11 +72,11 @@ func Register(handles *map[string]CommandInfo, aliasTable *aliases.AliasedTable)
 			if failedFormatting(newAlias) {
 				message = "Alias should only be alphanumerics and/or whitespace . - _"
 			} else {
-				aliases.SetAlias(user.ID, newAlias, *aliasTable)
+				table.SetAlias(user.ID, newAlias)
 				message = fmt.Sprintf("Set `%s`'s nickname to %s", user.GlobalName, newAlias)
 			}
-			if err := aliases.SetFile(*aliasTable); err != nil {
-				return nil
+			if err := table.Write(); err != nil {
+				return err
 			}
 
 			//

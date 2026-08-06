@@ -45,8 +45,9 @@ func rebuildCommand(c *discordgo.ApplicationCommandInteractionData) string {
 }
 
 // 2. Initialize a new Discord
+// TODO aliases and auth are now in Commands. fix the type errors
 func Start(instr StartInstructions) (session *Session, err error) {
-	token, handles, logger, aliases, auth := instr.Token, instr.Commands.Handles, instr.Logger, instr.TargetAliases, instr.Authorizations
+	token, handles, logger, aliases, auth := instr.Token, instr.Commands.Handles, instr.Logger, instr.Commands.Aliases, instr.Commands.Auth
 	dgSession, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return

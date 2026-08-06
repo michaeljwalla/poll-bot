@@ -28,8 +28,9 @@ func init() {
 }
 
 // map is already reference-like but just for continuity
-func Register(handles *map[string]CommandInfo, auth *authorize.AuthorizedTable) {
-	(*handles)["modrank"] = CommandInfo{
+func Register(bcp *types.BotCommandPackage) {
+	table := bcp.Auth
+	(*bcp.Handles)["modrank"] = CommandInfo{
 		DGInfo: &discordgo.ApplicationCommand{
 			Name:        "modrank",
 			Description: "modify user rank",
@@ -57,36 +58,38 @@ func Register(handles *map[string]CommandInfo, auth *authorize.AuthorizedTable) 
 				optionMap[opt.Name] = opt
 			}
 
-			//
-			var user *discordgo.User
+			// init param data (target, reqRank)
+			var target *discordgo.User
 			if uSelect, ok := optionMap["user"]; ok {
-				user = uSelect.UserValue(s)
+				target = uSelect.UserValue(s)
 			} else {
 				return errors.New("couldn't get user field to set")
 			}
-			if user == nil {
+			if target == nil {
 				return errors.New("couldn't fetch user (nil)")
 			}
-			var rank authorize.Rank
+			var reqRank authorize.Rank
 			if rSelect, ok := optionMap["rank"]; ok {
-				rank = authorize.Rank(rSelect.IntValue())
+				reqRank = authorize.Rank(rSelect.IntValue())
 			}
-			rankStr := authorize.Stringify(rank)
+			reqRankStr := authorize.Stringify(reqRank)
 
+			//validate request then apply
 			var message string
-			senderRank := authorize.GetRank(i.Member.User.ID, *auth)
-			if rankStr == "UNKNOWN" {
+			senderRank := table.GetRank(i.Member.User.ID)
+			if reqRankStr == "UNKNOWN" {
 				message = "I don't know what rank that is."
-			} else if rank >= senderRank || senderRank <= authorize.GetRank(user.ID, *auth) {
+			} else if reqRank >= senderRank || table.GetRank(target.ID) >= senderRank {
 				message = "You can't rank someone higher than or equal to yourself."
 			} else {
-				authorize.SetRank(user.ID, rank, *auth)
-				if err := authorize.SetFile(*auth); err != nil {
-					return nil
+				table.SetRank(target.ID, reqRank)
+				if err := table.Write(); err != nil {
+					return err
 				}
-				message = fmt.Sprintf("Set `%s`'s rank to %s", user.GlobalName, rankStr)
+				message = fmt.Sprintf("Set `%s`'s rank to %s", target.Username, reqRankStr)
 			}
-			//
+
+			// response
 			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{

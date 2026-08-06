@@ -14,16 +14,23 @@ import (
 type CommandInfo = types.CommandInfo
 type EventCallback = types.EventCallback
 
-var handles = map[string]CommandInfo{}
-
-var CommandPackage = types.BotCommandPackage{
-	Handles: &handles,
+type RegisterReqs struct {
+	Aliases *aliases.AliasTable
+	Auth    *authorize.AuthTable
 }
 
-func init() {
-	ping.Register(&handles)
-	rate.Register(&handles)
-	rank.Register(&handles, &authorize.AuthTable)
-	modrank.Register(&handles, &authorize.AuthTable)
-	alias.Register(&handles, &aliases.AliasTable)
+func Register(reqs RegisterReqs) *types.BotCommandPackage {
+	handles := make(map[string]CommandInfo)
+	bcp := types.BotCommandPackage{
+		Handles: &handles,
+		Aliases: reqs.Aliases,
+		Auth:    reqs.Auth,
+	}
+
+	ping.Register(&bcp)
+	rate.Register(&bcp)
+	rank.Register(&bcp)
+	modrank.Register(&bcp)
+	alias.Register(&bcp)
+	return &bcp
 }

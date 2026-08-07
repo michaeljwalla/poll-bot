@@ -67,7 +67,7 @@ func Start(instr StartInstructions) (session *Session, err error) {
 				statusChar = "✅"
 				callback = handle.Callback
 			}
-			logger.Add(fmt.Sprintf("%v (%33s) %02d%s| %s", id, alias, auth.GetRank(id), statusChar, cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+			logger.Add(fmt.Sprintf("%v %33s %02d %s| %s", id, alias, auth.GetRank(id), statusChar, cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
 
 			if err := callback(s, i); err != nil {
 				logger.Warn(fmt.Sprintf("While handling %s: %v", rebuildCommand(&commandData), err))

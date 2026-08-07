@@ -1,9 +1,9 @@
 package ping
 
 import (
-	"poll-bot/src/authorize"
-	"poll-bot/src/types"
-	"poll-bot/src/unix"
+	"poll-bot/root/fileio/authorize"
+	"poll-bot/root/types"
+	"poll-bot/root/unix"
 	"strconv"
 
 	"github.com/bwmarrin/discordgo"

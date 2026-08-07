@@ -1,7 +1,7 @@
 package aliases
 
 import (
-	fd "poll-bot/src/filedict"
+	fd "poll-bot/root/datas/filedict"
 )
 
 type AliasTable struct {

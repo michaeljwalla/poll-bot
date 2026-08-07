@@ -3,7 +3,7 @@ package audit
 import (
 	"fmt"
 	"math"
-	"poll-bot/src/set"
+	"poll-bot/root/datas/set"
 	"slices"
 	"strings"
 )

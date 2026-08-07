@@ -1,14 +1,14 @@
 package commands
 
 import (
-	"poll-bot/src/aliases"
-	"poll-bot/src/authorize"
-	"poll-bot/src/commands/alias"
-	"poll-bot/src/commands/modrank"
-	"poll-bot/src/commands/ping"
-	"poll-bot/src/commands/rank"
-	"poll-bot/src/commands/rate"
-	"poll-bot/src/types"
+	"poll-bot/root/commands/alias"
+	"poll-bot/root/commands/modrank"
+	"poll-bot/root/commands/ping"
+	"poll-bot/root/commands/rank"
+	"poll-bot/root/commands/rate"
+	"poll-bot/root/fileio/aliases"
+	"poll-bot/root/fileio/authorize"
+	"poll-bot/root/types"
 )
 
 type CommandInfo = types.CommandInfo

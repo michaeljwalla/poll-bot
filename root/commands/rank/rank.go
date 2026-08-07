@@ -2,8 +2,8 @@ package rank
 
 import (
 	"fmt"
-	"poll-bot/src/authorize"
-	"poll-bot/src/types"
+	"poll-bot/root/fileio/authorize"
+	"poll-bot/root/types"
 
 	"github.com/bwmarrin/discordgo"
 )

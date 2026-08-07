@@ -1,7 +1,7 @@
 package authorize
 
 import (
-	fd "poll-bot/src/filedict"
+	fd "poll-bot/root/datas/filedict"
 
 	"github.com/bwmarrin/discordgo"
 )

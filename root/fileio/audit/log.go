@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"poll-bot/src/atomicqueue"
+	"poll-bot/root/datas/atomicqueue"
 	"runtime/debug"
 	"sync/atomic"
 	"time"

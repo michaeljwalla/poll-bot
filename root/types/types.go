@@ -1,9 +1,9 @@
 package types
 
 import (
-	"poll-bot/src/aliases"
-	"poll-bot/src/audit"
-	"poll-bot/src/authorize"
+	"poll-bot/root/fileio/aliases"
+	"poll-bot/root/fileio/audit"
+	"poll-bot/root/fileio/authorize"
 
 	"github.com/bwmarrin/discordgo"
 )

@@ -1,10 +1,12 @@
-package modrank
+package alias
 
 import (
 	"errors"
 	"fmt"
-	"poll-bot/src/authorize"
-	"poll-bot/src/types"
+	"poll-bot/root/fileio/authorize"
+	"poll-bot/root/types"
+	"regexp"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -13,26 +15,20 @@ type CommandInfo = types.CommandInfo
 type EventCallback = types.EventCallback
 
 var metadata = types.CommandMetadata{
-	MinTrustLevel: authorize.PROMOTER,
+	MinTrustLevel: authorize.MANAGER,
 }
 
-var rankChoices = make([]*discordgo.ApplicationCommandOptionChoice, authorize.NUM_RANKS)
-
-func init() {
-	for i := range authorize.NUM_RANKS {
-		rankChoices[i] = &discordgo.ApplicationCommandOptionChoice{
-			Name:  authorize.Stringify(i),
-			Value: i,
-		}
-	}
+func failedFormatting(s string) bool {
+	matched, _ := regexp.MatchString(`[^a-zA-Z0-9\.\-_ ]`, s)
+	return matched
 }
 
 // map is already reference-like but just for continuity
 func Register(bcp *types.BotCommandPackage) {
-	table := bcp.Auth
-	(*bcp.Handles)["modrank"] = CommandInfo{
+	table := bcp.Aliases
+	(*bcp.Handles)["alias"] = CommandInfo{
 		DGInfo: &discordgo.ApplicationCommand{
-			Name:        "modrank",
+			Name:        "alias",
 			Description: "modify user rank",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
@@ -42,11 +38,10 @@ func Register(bcp *types.BotCommandPackage) {
 					Required:    true,
 				},
 				{
-					Type:        discordgo.ApplicationCommandOptionInteger,
-					Name:        "rank",
-					Description: "rank to set (cannot be >= your own)",
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "nickname",
+					Description: "nickname (stored internally)",
 					Required:    true,
-					Choices:     rankChoices,
 				},
 			},
 		},
@@ -58,40 +53,35 @@ func Register(bcp *types.BotCommandPackage) {
 				optionMap[opt.Name] = opt
 			}
 
-			// init param data (target, reqRank)
-			var target *discordgo.User
+			//
+			var user *discordgo.User
 			if uSelect, ok := optionMap["user"]; ok {
-				target = uSelect.UserValue(s)
+				user = uSelect.UserValue(s)
 			} else {
 				return errors.New("couldn't get user field to set")
 			}
-			if target == nil {
+			if user == nil {
 				return errors.New("couldn't fetch user (nil)")
 			}
-			var reqRank authorize.Rank
-			if rSelect, ok := optionMap["rank"]; ok {
-				reqRank = rSelect.IntValue()
+			var newAlias string
+			if rSelect, ok := optionMap["nickname"]; ok {
+				newAlias = strings.TrimSpace(rSelect.StringValue())
 			}
-			reqRankStr := authorize.Stringify(reqRank)
 
-			//validate request then apply
 			var message string
-			senderRank := table.GetRank(i.Member.User.ID)
-			if reqRankStr == "UNKNOWN" {
-				message = "I don't know what rank that is."
-			} else if reqRank >= senderRank || table.GetRank(target.ID) >= senderRank {
-				message = "You can't rank someone higher than or equal to yourself."
+			if failedFormatting(newAlias) {
+				message = "Alias should only be alphanumerics and/or whitespace . - _"
 			} else {
-				if err := table.SetRank(target.ID, reqRank); err != nil {
+				if err := table.SetAlias(user.ID, newAlias); err != nil {
 					return err
 				}
 				if err := table.Write(); err != nil {
 					return err
 				}
-				message = fmt.Sprintf("Set `%s`'s rank to %s", target.Username, reqRankStr)
+				message = fmt.Sprintf("Set `%s`'s nickname to %s", user.GlobalName, newAlias)
 			}
 
-			// response
+			//
 			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{

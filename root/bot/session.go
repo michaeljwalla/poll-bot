@@ -2,9 +2,9 @@ package bot
 
 import (
 	"fmt"
-	"poll-bot/src/audit"
-	"poll-bot/src/authorize"
-	"poll-bot/src/types"
+	"poll-bot/root/fileio/audit"
+	"poll-bot/root/fileio/authorize"
+	"poll-bot/root/types"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"

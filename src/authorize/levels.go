@@ -1,6 +1,6 @@
 package authorize
 
-type Rank int
+type Rank = int64
 
 const (
 	DEFAULT Rank = iota
@@ -8,7 +8,7 @@ const (
 	PROMOTER
 	MANAGER
 )
-const NUM_RANKS = 4
+const NUM_RANKS = MANAGER + 1
 
 var rankStrings = map[Rank]string{
 	DEFAULT:  "DEFAULT",

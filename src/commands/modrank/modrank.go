@@ -21,7 +21,7 @@ var rankChoices = make([]*discordgo.ApplicationCommandOptionChoice, authorize.NU
 func init() {
 	for i := range authorize.NUM_RANKS {
 		rankChoices[i] = &discordgo.ApplicationCommandOptionChoice{
-			Name:  authorize.Stringify(authorize.Rank(i)),
+			Name:  authorize.Stringify(i),
 			Value: i,
 		}
 	}
@@ -70,7 +70,7 @@ func Register(bcp *types.BotCommandPackage) {
 			}
 			var reqRank authorize.Rank
 			if rSelect, ok := optionMap["rank"]; ok {
-				reqRank = authorize.Rank(rSelect.IntValue())
+				reqRank = rSelect.IntValue()
 			}
 			reqRankStr := authorize.Stringify(reqRank)
 
@@ -82,7 +82,9 @@ func Register(bcp *types.BotCommandPackage) {
 			} else if reqRank >= senderRank || table.GetRank(target.ID) >= senderRank {
 				message = "You can't rank someone higher than or equal to yourself."
 			} else {
-				table.SetRank(target.ID, reqRank)
+				if err := table.SetRank(target.ID, reqRank); err != nil {
+					return err
+				}
 				if err := table.Write(); err != nil {
 					return err
 				}

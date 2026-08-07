@@ -12,14 +12,6 @@ import (
 
 type StartInstructions = types.StartInstructions
 type Session = types.Session
-type CommandRegisters = types.SessionCommandRegisters
-
-func resolveAlias(s string, as map[string]string) string {
-	if value, ok := as[s]; ok {
-		return value
-	}
-	return "?"
-}
 
 func getCommandValue(opt *discordgo.ApplicationCommandInteractionDataOption) any {
 	switch opt.Type {
@@ -61,19 +53,21 @@ func Start(instr StartInstructions) (session *Session, err error) {
 		// 	// Handle component interactions or autocomplete here if needed
 		// }
 		commandData := i.ApplicationCommandData()
+		var statusChar string
 		if handle, ok := (*handles)[commandData.Name]; ok {
 			id := i.Member.User.ID
 
-			alias := resolveAlias(id, aliases)
+			alias := aliases.GetAlias(id)
 			cmd := rebuildCommand(&commandData)
 			var callback types.EventCallback
-			if !authorize.CanUse(id, handle.Metadata.MinTrustLevel, auth) {
-				logger.Add(fmt.Sprintf("%v %33s) %02d❌| %s", id, "("+alias, authorize.GetRank(id, auth), cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+			if !auth.CanUse(id, handle.Metadata.MinTrustLevel) {
+				statusChar = "❌"
 				callback = authorize.PermissionsErrorIntercept // TODO
 			} else {
-				logger.Add(fmt.Sprintf("%v %33s) %02d✅| %s", id, "("+alias, authorize.GetRank(id, auth), cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+				statusChar = "✅"
 				callback = handle.Callback
 			}
+			logger.Add(fmt.Sprintf("%v (%33s) %02d%s| %s", id, alias, auth.GetRank(id), statusChar, cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
 
 			if err := callback(s, i); err != nil {
 				logger.Warn(fmt.Sprintf("While handling %s: %v", rebuildCommand(&commandData), err))
@@ -101,12 +95,9 @@ func Start(instr StartInstructions) (session *Session, err error) {
 
 	session = &Session{
 		DGSession: dgSession,
-		Registers: CommandRegisters{
-			Reference: types.BotCommandPackage{Handles: handles},
-			DGObjects: registeredCommands,
-		},
-		Logger:        logger,
-		TargetAliases: aliases,
+		Registers: registeredCommands,
+		Logger:    logger,
+		Package:   types.BotCommandPackage{Handles: handles},
 	}
 	logger.Add("Init success; bot online", audit.LogGroup.BOT)
 	return
@@ -123,7 +114,7 @@ func EndSession(session *Session) {
 	// 8. Clean up and remove commands upon shutdown
 	dgSession := session.DGSession
 
-	for _, cmd := range session.Registers.DGObjects {
+	for _, cmd := range session.Registers {
 		err := dgSession.ApplicationCommandDelete(dgSession.State.User.ID, "", cmd.ID)
 		if err != nil {
 			session.Logger.Warn(fmt.Sprintf("Cannot delete '%v' command: %v", cmd.Name, err), audit.LogGroup.BOT)

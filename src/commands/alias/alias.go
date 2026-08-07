@@ -72,11 +72,13 @@ func Register(bcp *types.BotCommandPackage) {
 			if failedFormatting(newAlias) {
 				message = "Alias should only be alphanumerics and/or whitespace . - _"
 			} else {
-				table.SetAlias(user.ID, newAlias)
+				if err := table.SetAlias(user.ID, newAlias); err != nil {
+					return err
+				}
+				if err := table.Write(); err != nil {
+					return err
+				}
 				message = fmt.Sprintf("Set `%s`'s nickname to %s", user.GlobalName, newAlias)
-			}
-			if err := table.Write(); err != nil {
-				return err
 			}
 
 			//

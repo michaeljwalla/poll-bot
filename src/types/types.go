@@ -27,14 +27,13 @@ type BotCommandPackage struct {
 
 type SessionCommandRegisters struct {
 	Reference BotCommandPackage
-	DGObjects []*discordgo.ApplicationCommand
 }
 type Session struct {
 	DGSession *discordgo.Session
-	Registers SessionCommandRegisters
+	Registers []*discordgo.ApplicationCommand
 	//
-	Logger        *audit.Log
-	TargetAliases map[string]string
+	Logger  *audit.Log
+	Package BotCommandPackage
 }
 
 type StartInstructions struct {

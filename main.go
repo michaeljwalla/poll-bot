@@ -64,7 +64,7 @@ func setAliases() *aliases.AliasTable {
 	return table
 }
 func setAuth() *authorize.AuthTable {
-	table, err := authorize.New(ALIAS_PATH)
+	table, err := authorize.New(AUTH_PATH)
 	if err != nil {
 		logger.Panic(fmt.Sprintf("Couldn't get auth: %v", err), audit.LogGroup.INIT)
 		return nil

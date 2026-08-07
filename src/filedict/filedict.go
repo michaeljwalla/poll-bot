@@ -18,12 +18,13 @@ type FileDict[K comparable, V any] struct {
 	closed  *atomic.Bool
 }
 
-var IsClosedError = errors.New("the FileDict is closed")
+var ErrIsClosed = errors.New("the FileDict is closed")
 
 func New[K comparable, V any](path string) (*FileDict[K, V], error) {
 	table := FileDict[K, V]{
-		data: make(map[K]V),
-		path: path,
+		data:   make(map[K]V),
+		path:   path,
+		closed: &atomic.Bool{},
 	}
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
@@ -72,11 +73,11 @@ func (table *FileDict[K, V]) IsClosed() bool {
 
 func (table *FileDict[K, V]) lockOrClosed() error {
 	if table.IsClosed() {
-		return IsClosedError
+		return ErrIsClosed
 	}
 	table.mutex.Lock()
 	if table.IsClosed() {
-		return IsClosedError
+		return ErrIsClosed
 	}
 	return nil
 }

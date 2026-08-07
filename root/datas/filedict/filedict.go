@@ -3,6 +3,7 @@ package filedict
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -20,7 +21,7 @@ type FileDict[K comparable, V any] struct {
 
 var ErrIsClosed = errors.New("the FileDict is closed")
 
-func New[K comparable, V any](path string) (*FileDict[K, V], error) {
+func New[K comparable, V any](path string, validate func(*K, *V) bool) (*FileDict[K, V], error) {
 	table := FileDict[K, V]{
 		data:   make(map[K]V),
 		path:   path,
@@ -34,6 +35,11 @@ func New[K comparable, V any](path string) (*FileDict[K, V], error) {
 	table.encoder = json.NewEncoder(file)
 	if err := table.SyncRead(); err != nil {
 		return nil, err
+	}
+	for k, v := range table.data {
+		if !validate(&k, &v) {
+			return nil, fmt.Errorf("invalidated entry: %v | %v", k, v)
+		}
 	}
 	return &table, nil
 }

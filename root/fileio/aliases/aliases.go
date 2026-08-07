@@ -2,14 +2,20 @@ package aliases
 
 import (
 	fd "poll-bot/root/datas/filedict"
+	"strconv"
 )
 
 type AliasTable struct {
 	data *fd.FileDict[string, string]
 }
 
+func validate(uid *string, name *string) bool {
+	_, err := strconv.Atoi(*uid)
+	return err == nil
+}
+
 func New(path string) (*AliasTable, error) {
-	table, err := fd.New[string, string](path)
+	table, err := fd.New(path, validate)
 	if err != nil {
 		return nil, err
 	}

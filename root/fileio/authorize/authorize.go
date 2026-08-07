@@ -2,6 +2,7 @@ package authorize
 
 import (
 	fd "poll-bot/root/datas/filedict"
+	"strconv"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -10,8 +11,12 @@ type AuthTable struct {
 	data *fd.FileDict[string, Rank]
 }
 
+func validate(uid *string, rank *Rank) bool {
+	_, err := strconv.Atoi(*uid)
+	return err == nil
+}
 func New(path string) (*AuthTable, error) {
-	table, err := fd.New[string, Rank](path)
+	table, err := fd.New(path, validate)
 	if err != nil {
 		return nil, err
 	}

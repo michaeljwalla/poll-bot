@@ -3,7 +3,7 @@ package alias
 import (
 	"errors"
 	"fmt"
-	"poll-bot/root/fileio/authorize"
+	"poll-bot/root/managers/authorize"
 	"poll-bot/root/types"
 	"regexp"
 	"strings"

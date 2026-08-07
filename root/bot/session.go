@@ -2,8 +2,8 @@ package bot
 
 import (
 	"fmt"
-	"poll-bot/root/fileio/audit"
-	"poll-bot/root/fileio/authorize"
+	"poll-bot/root/managers/audit"
+	"poll-bot/root/managers/authorize"
 	"poll-bot/root/types"
 	"strings"
 

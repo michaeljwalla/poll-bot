@@ -7,7 +7,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-type AuthTable struct {
+type AuthManager struct {
 	data *fd.FileDict[string, Rank]
 }
 
@@ -15,21 +15,21 @@ func validate(uid *string, rank *Rank) bool {
 	_, err := strconv.Atoi(*uid)
 	return err == nil
 }
-func New(path string) (*AuthTable, error) {
+func New(path string) (*AuthManager, error) {
 	table, err := fd.New(path, validate)
 	if err != nil {
 		return nil, err
 	}
-	return &AuthTable{
+	return &AuthManager{
 		data: table,
 	}, nil
 }
 
-func (table *AuthTable) CanUse(uid string, rank Rank) bool {
+func (table *AuthManager) CanUse(uid string, rank Rank) bool {
 	return table.GetRank(uid) >= rank
 }
 
-func (table *AuthTable) GetRank(uid string) Rank {
+func (table *AuthManager) GetRank(uid string) Rank {
 	userRank, ok := table.data.Get(uid)
 	if !ok {
 		userRank = DEFAULT
@@ -37,12 +37,12 @@ func (table *AuthTable) GetRank(uid string) Rank {
 	return userRank
 }
 
-func (table *AuthTable) SetRank(uid string, rank Rank) error {
+func (table *AuthManager) SetRank(uid string, rank Rank) error {
 	return table.data.Set(uid, rank)
 }
 
-func (table *AuthTable) Write() error { return table.data.SyncWrite() }
-func (table *AuthTable) Read() error  { return table.data.SyncRead() }
+func (table *AuthManager) Write() error { return table.data.SyncWrite() }
+func (table *AuthManager) Read() error  { return table.data.SyncRead() }
 
 func PermissionsErrorIntercept(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -51,4 +51,7 @@ func PermissionsErrorIntercept(s *discordgo.Session, i *discordgo.InteractionCre
 			Content: "Sorry, you can't use that command.",
 		},
 	})
+}
+func (table *AuthManager) Close() error {
+	return table.data.Close()
 }

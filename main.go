@@ -8,10 +8,11 @@ import (
 	"os/signal"
 	"poll-bot/root/bot"
 	"poll-bot/root/commands"
-	"poll-bot/root/fileio/aliases"
-	"poll-bot/root/fileio/audit"
-	"poll-bot/root/fileio/authorize"
-	"poll-bot/root/fileio/version"
+	"poll-bot/root/info/version"
+	"poll-bot/root/managers/aliases"
+	"poll-bot/root/managers/audit"
+	"poll-bot/root/managers/authorize"
+	"poll-bot/root/managers/polls"
 	"strings"
 	"syscall"
 )
@@ -31,6 +32,7 @@ const (
 	LOG_PATH   = DATA_PATH + "logs/"
 	ALIAS_PATH = DATA_PATH + "aliases.json"
 	AUTH_PATH  = DATA_PATH + "auth.json"
+	POLLS_PATH = DATA_PATH + "polls/"
 )
 
 func setEnvironmentVars() (token string, mode string) {
@@ -55,21 +57,29 @@ func setupLogger(mode string) {
 	logger.Add(fmt.Sprintf("Running in '%s' mode", mode), audit.LogGroup.INIT)
 }
 
-func setAliases() *aliases.AliasTable {
-	table, err := aliases.New(ALIAS_PATH)
+func getManAliases() *aliases.AliasManager {
+	man, err := aliases.New(ALIAS_PATH)
 	if err != nil {
-		logger.Panic(fmt.Sprintf("Couldn't get aliases: %v", err), audit.LogGroup.INIT)
+		logger.Panic(fmt.Sprintf("Couldn't init aliases: %v", err), audit.LogGroup.INIT)
 		return nil
 	}
-	return table
+	return man
 }
-func setAuth() *authorize.AuthTable {
-	table, err := authorize.New(AUTH_PATH)
+func getManAuth() *authorize.AuthManager {
+	man, err := authorize.New(AUTH_PATH)
 	if err != nil {
-		logger.Panic(fmt.Sprintf("Couldn't get auth: %v", err), audit.LogGroup.INIT)
+		logger.Panic(fmt.Sprintf("Couldn't init auth manager: %v", err), audit.LogGroup.INIT)
 		return nil
 	}
-	return table
+	return man
+}
+func getManPolls() *polls.PollManager {
+	man, err := polls.New(POLLS_PATH)
+	if err != nil {
+		logger.Panic(fmt.Sprintf("Couldn't init poll manager: %v", err), audit.LogGroup.INIT)
+		return nil
+	}
+	return man
 }
 func init() {
 	log.SetFlags(log.Ldate) //only date no time
@@ -118,9 +128,13 @@ func main() {
 	checkForUpdates()
 
 	commands := commands.Register(commands.RegisterReqs{
-		Aliases: setAliases(),
-		Auth:    setAuth(),
+		Aliases: getManAliases(),
+		Auth:    getManAuth(),
+		Polls:   getManPolls(),
 	})
+	defer commands.Aliases.Close() //nolint
+	defer commands.Auth.Close()    //nolint
+
 	session, err := bot.Start(bot.StartInstructions{
 		Token:    token,
 		Commands: commands,

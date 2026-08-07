@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-type AliasTable struct {
+type AliasManager struct {
 	data *fd.FileDict[string, string]
 }
 
@@ -14,16 +14,16 @@ func validate(uid *string, name *string) bool {
 	return err == nil
 }
 
-func New(path string) (*AliasTable, error) {
+func New(path string) (*AliasManager, error) {
 	table, err := fd.New(path, validate)
 	if err != nil {
 		return nil, err
 	}
-	return &AliasTable{
+	return &AliasManager{
 		data: table,
 	}, nil
 }
-func (table *AliasTable) GetAlias(uid string) string {
+func (table *AliasManager) GetAlias(uid string) string {
 	userRank, ok := table.data.Get(uid)
 	if !ok {
 		userRank = "?"
@@ -32,9 +32,13 @@ func (table *AliasTable) GetAlias(uid string) string {
 }
 
 // maps are referential
-func (table *AliasTable) SetAlias(uid string, alias string) error {
+func (table *AliasManager) SetAlias(uid string, alias string) error {
 	return table.data.Set(uid, alias)
 }
 
-func (table *AliasTable) Write() error { return table.data.SyncWrite() }
-func (table *AliasTable) Read() error  { return table.data.SyncRead() }
+func (table *AliasManager) Write() error { return table.data.SyncWrite() }
+func (table *AliasManager) Read() error  { return table.data.SyncRead() }
+
+func (table *AliasManager) Close() error {
+	return table.data.Close()
+}

@@ -2,7 +2,7 @@ package rate
 
 import (
 	"fmt"
-	"poll-bot/root/fileio/authorize"
+	"poll-bot/root/managers/authorize"
 	"poll-bot/root/types"
 	"strconv"
 	"strings"

@@ -3,7 +3,7 @@ package modrank
 import (
 	"errors"
 	"fmt"
-	"poll-bot/root/fileio/authorize"
+	"poll-bot/root/managers/authorize"
 	"poll-bot/root/types"
 
 	"github.com/bwmarrin/discordgo"

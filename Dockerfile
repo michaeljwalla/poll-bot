@@ -1,11 +1,11 @@
 # use build.sh to set
 ARG GO_VER=tip
-FROM golang:${GO_VER}-alpine AS downloader
+FROM golang:${GO_VER}-alpine AS getter
 
 WORKDIR /app
 
 # jq parses the github api
-RUN apk add --no-cache curl jq
+RUN apk add curl jq
 
 #formalities
 ARG USERNAME="michaeljwalla"
@@ -22,9 +22,10 @@ RUN DOWNLOAD_URL=$(curl -sSL \
     && tar -xvzf /tmp/release.tar.gz -C ./bin
 
 # runner
-FROM alpine:latest
+FROM scratch
 WORKDIR /app
 
-COPY --from=downloader /app/bin/main ./main
+COPY --from=getter /app/bin/main ./main
+COPY --from=getter /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
-CMD ["./main"]
+ENTRYPOINT ["./main"]

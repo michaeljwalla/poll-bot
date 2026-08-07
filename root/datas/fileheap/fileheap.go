@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -66,6 +67,16 @@ func New[K any](path string, less func(*K, *K) bool, validate func(*K) bool) (*F
 	}
 	heaps.Init(&heap.inner)
 	return &heap, nil
+}
+
+func (heap *FileHeap[K]) Iter() iter.Seq[K] {
+	return func(yield func(K) bool) {
+		for _, item := range heap.inner.data {
+			if !yield(item) {
+				return
+			}
+		}
+	}
 }
 
 func (heap *FileHeap[K]) Len() int {

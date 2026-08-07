@@ -132,8 +132,10 @@ func main() {
 		Auth:    getManAuth(),
 		Polls:   getManPolls(),
 	})
+
 	defer commands.Aliases.Close() //nolint
 	defer commands.Auth.Close()    //nolint
+	defer commands.Polls.Close()   //nolint
 
 	session, err := bot.Start(bot.StartInstructions{
 		Token:    token,

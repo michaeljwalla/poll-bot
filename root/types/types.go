@@ -21,10 +21,10 @@ type CommandInfo struct {
 }
 
 type BotCommandPackage struct {
-	Handles  *map[string]CommandInfo
-	Aliases  *aliases.AliasManager
-	Auth     *authorize.AuthManager
-	PollData *polls.PollManager
+	Handles *map[string]CommandInfo
+	Aliases *aliases.AliasManager
+	Auth    *authorize.AuthManager
+	Polls   *polls.PollManager
 }
 
 type SessionCommandRegisters struct {

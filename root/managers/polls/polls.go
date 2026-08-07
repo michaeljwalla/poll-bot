@@ -12,17 +12,20 @@ const (
 	MISC_SUBDIR     = "misc/"
 )
 
-type pollPair = pair.Pair[string, string]
+type snowflake = string
+type expiry = string
+
+type PollPair = pair.Pair[snowflake, expiry]
 type PollManager struct {
-	queue *fh.FileHeap[pollPair]
+	queue *fh.FileHeap[PollPair]
 }
 
-func less(l *pollPair, r *pollPair) bool {
+func less(l *PollPair, r *PollPair) bool {
 	left, _ := strconv.Atoi(l.First)
 	right, _ := strconv.Atoi(r.First)
 	return left < right
 }
-func validate(pair *pollPair) bool {
+func validate(pair *PollPair) bool {
 	_, err := strconv.Atoi(pair.First)
 	return err == nil
 }
@@ -40,16 +43,19 @@ func New(path string) (*PollManager, error) {
 func (man *PollManager) Write() error { return man.queue.SyncWrite() }
 func (man *PollManager) Read() error  { return man.queue.SyncRead() }
 
-func (man *PollManager) Push(value pollPair) error {
+func (man *PollManager) Push(value PollPair) error {
 	return man.queue.Push(value)
 }
-func (man *PollManager) Pop() (pollPair, error) {
+func (man *PollManager) Pop() (PollPair, error) {
 	return man.queue.Pop()
 }
-func (man *PollManager) Peek() (pollPair, bool) {
+func (man *PollManager) Peek() (PollPair, bool) {
 	return man.queue.Peek()
 }
 
 func (man *PollManager) Close() error {
 	return man.queue.Close()
+}
+func (man *PollManager) Len() int {
+	return man.queue.Len()
 }

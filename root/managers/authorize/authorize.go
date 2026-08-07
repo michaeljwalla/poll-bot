@@ -1,18 +1,22 @@
 package authorize
 
 import (
+	"iter"
 	fd "poll-bot/root/datas/filedict"
 	"strconv"
 
 	"github.com/bwmarrin/discordgo"
 )
 
+type uid = string
+type Rank = int64
+
 type AuthManager struct {
-	data *fd.FileDict[string, Rank]
+	data *fd.FileDict[uid, Rank]
 }
 
-func validate(uid *string, rank *Rank) bool {
-	_, err := strconv.Atoi(*uid)
+func validate(id *uid, rank *Rank) bool {
+	_, err := strconv.Atoi(*id)
 	return err == nil
 }
 func New(path string) (*AuthManager, error) {
@@ -25,20 +29,20 @@ func New(path string) (*AuthManager, error) {
 	}, nil
 }
 
-func (table *AuthManager) CanUse(uid string, rank Rank) bool {
-	return table.GetRank(uid) >= rank
+func (table *AuthManager) CanUse(id uid, rank Rank) bool {
+	return table.GetRank(id) >= rank
 }
 
-func (table *AuthManager) GetRank(uid string) Rank {
-	userRank, ok := table.data.Get(uid)
+func (table *AuthManager) GetRank(id uid) Rank {
+	userRank, ok := table.data.Get(id)
 	if !ok {
 		userRank = DEFAULT
 	}
 	return userRank
 }
 
-func (table *AuthManager) SetRank(uid string, rank Rank) error {
-	return table.data.Set(uid, rank)
+func (table *AuthManager) SetRank(id uid, rank Rank) error {
+	return table.data.Set(id, rank)
 }
 
 func (table *AuthManager) Write() error { return table.data.SyncWrite() }
@@ -54,4 +58,8 @@ func PermissionsErrorIntercept(s *discordgo.Session, i *discordgo.InteractionCre
 }
 func (table *AuthManager) Close() error {
 	return table.data.Close()
+}
+
+func (table *AuthManager) Iter() iter.Seq2[uid, Rank] {
+	return table.data.Iter()
 }

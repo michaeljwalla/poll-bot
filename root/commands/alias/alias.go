@@ -11,6 +11,10 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+const (
+	MAX_ALIAS_LEN = 24
+)
+
 type CommandInfo = types.CommandInfo
 type EventCallback = types.EventCallback
 
@@ -20,7 +24,7 @@ var metadata = types.CommandMetadata{
 
 func failedFormatting(s string) bool {
 	matched, _ := regexp.MatchString(`[^a-zA-Z0-9\.\-_ ]`, s)
-	return matched
+	return matched && len(s) <= MAX_ALIAS_LEN
 }
 
 // map is already reference-like but just for continuity

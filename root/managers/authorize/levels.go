@@ -1,7 +1,5 @@
 package authorize
 
-type Rank = int64
-
 const (
 	DEFAULT Rank = iota
 	MANAGE

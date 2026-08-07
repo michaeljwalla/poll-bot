@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -42,6 +43,15 @@ func New[K comparable, V any](path string, validate func(*K, *V) bool) (*FileDic
 		}
 	}
 	return &table, nil
+}
+func (table *FileDict[K, V]) Iter() iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		for key, value := range table.data {
+			if !yield(key, value) {
+				return
+			}
+		}
+	}
 }
 
 // write contents to the file

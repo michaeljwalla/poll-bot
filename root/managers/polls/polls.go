@@ -17,7 +17,6 @@ const (
 )
 
 type snowflake = string
-type expiry = string
 
 type Poll struct {
 	Message snowflake

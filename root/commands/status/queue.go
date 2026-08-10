@@ -106,7 +106,7 @@ func cmd_view_queue(s session, i intxn, bcp bcpackage) error {
 	} else {
 		formatted, err := fromMessage(top, *poll)
 		if err != nil {
-			return fmt.Errorf("No Poll on %v", top)
+			return fmt.Errorf("no Poll on %v", top)
 		}
 		str, link := formatted.Stringify()
 		message = fmt.Sprintf(`### Next: %s

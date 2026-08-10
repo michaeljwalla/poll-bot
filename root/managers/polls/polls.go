@@ -2,32 +2,53 @@ package polls
 
 import (
 	fh "poll-bot/root/datas/fileheap"
-	"poll-bot/root/datas/pair"
 	"strconv"
+	"sync/atomic"
+	"time"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 const (
 	QUEUE_SUBPATH   = "queue.txt"
 	RATINGS_SUBPATH = "ratings.csv"
 	MISC_SUBDIR     = "misc/"
+	RATINGS_SUBDIR  = "ratings/"
 )
 
 type snowflake = string
 type expiry = string
 
-type PollPair = pair.Pair[snowflake, expiry]
+type Poll struct {
+	Message snowflake
+	Channel snowflake
+	Guild   snowflake
+	Expiry  *time.Time
+}
 type PollManager struct {
-	queue *fh.FileHeap[PollPair]
+	queue   *fh.FileHeap[Poll]
+	session atomic.Pointer[discordgo.Session]
 }
 
-func less(l *PollPair, r *PollPair) bool {
-	left, _ := strconv.Atoi(l.First)
-	right, _ := strconv.Atoi(r.First)
-	return left < right
+// no-op after first run
+func (man *PollManager) SetSession(s *discordgo.Session) bool {
+	return man.session.CompareAndSwap(nil, s)
 }
-func validate(pair *PollPair) bool {
-	_, err := strconv.Atoi(pair.First)
-	return err == nil
+func (man *PollManager) HasSession() bool {
+	return man.session.Load() != nil
+}
+func less(l *Poll, r *Poll) bool {
+	return l.Expiry == nil || (r.Expiry != nil && l.Expiry.Before(*r.Expiry))
+}
+
+func validate(poll *Poll) bool {
+	if _, err := strconv.Atoi(poll.Message); err != nil {
+		return false
+	}
+	if _, err := strconv.Atoi(poll.Channel); err != nil {
+		return false
+	}
+	return poll.Expiry != nil
 }
 func New(path string) (*PollManager, error) {
 	table, err := fh.New(path+QUEUE_SUBPATH, less, validate)
@@ -43,13 +64,13 @@ func New(path string) (*PollManager, error) {
 func (man *PollManager) Write() error { return man.queue.SyncWrite() }
 func (man *PollManager) Read() error  { return man.queue.SyncRead() }
 
-func (man *PollManager) Push(value PollPair) error {
+func (man *PollManager) Push(value Poll) error {
 	return man.queue.Push(value)
 }
-func (man *PollManager) Pop() (PollPair, error) {
+func (man *PollManager) Pop() (Poll, error) {
 	return man.queue.Pop()
 }
-func (man *PollManager) Peek() (PollPair, bool) {
+func (man *PollManager) Peek() (Poll, bool) {
 	return man.queue.Peek()
 }
 

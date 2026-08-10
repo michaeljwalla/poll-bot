@@ -45,6 +45,9 @@ func Start(instr StartInstructions) (session *Session, err error) {
 		return
 	}
 
+	//setup bcp/managers
+	instr.Commands.Polls.SetSession(dgSession)
+
 	logger.Add("Begin bot init", audit.LogGroup.BOT)
 	// set perms "intents" & register gateway handler boilerplate
 	dgSession.Identify.Intents = discordgo.IntentsGuilds

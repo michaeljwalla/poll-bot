@@ -18,12 +18,12 @@ var metadata = types.CommandMetadata{
 }
 
 var DEFAULT_RATING_ANSWERS []string = []string{
-	repStr("⭐", 5),
-	repStr("⭐", 4),
-	repStr("⭐", 3),
-	repStr("⭐", 2),
-	repStr("⭐", 1),
 	"N/A",
+	repStr("⭐", 1),
+	repStr("⭐", 2),
+	repStr("⭐", 3),
+	repStr("⭐", 4),
+	repStr("⭐", 5),
 }
 
 func repStr(s string, n int) string {
@@ -37,10 +37,10 @@ func repStr(s string, n int) string {
 
 func get_rate_answers(comment_map map[string]*discordgo.ApplicationCommandInteractionDataOption) *[]discordgo.PollAnswer {
 	answers := make([]discordgo.PollAnswer, len(DEFAULT_RATING_ANSWERS))
-	for i := range 6 {
+	for i := 5; i >= 0; i-- {
 		answer := &answers[5-i]
-		answer.Media = &discordgo.PollMedia{Text: DEFAULT_RATING_ANSWERS[5-i]}
-
+		answer.Media = &discordgo.PollMedia{Text: DEFAULT_RATING_ANSWERS[i]}
+		answer.AnswerID = i
 		comment, ok := comment_map["c"+strconv.Itoa(i)]
 		if !ok {
 			continue

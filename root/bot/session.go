@@ -82,15 +82,18 @@ func Start(instr StartInstructions) (session *Session, err error) {
 	}
 
 	// register slash commands
-	registeredCommands := make([]*discordgo.ApplicationCommand, len(*handles))
-	cur := 0
-	for _, cmd := range *handles {
-		rcmd, err := dgSession.ApplicationCommandCreate(dgSession.State.User.ID, "", cmd.DGInfo)
-		if err != nil {
-			logger.Panic(fmt.Sprintf("Cannot create '%v' command: %v", cmd.DGInfo.Name, err), audit.LogGroup.BOT)
+	var registeredCommands []*discordgo.ApplicationCommand
+	{
+		payload := make([]*discordgo.ApplicationCommand, len(*handles))
+		i := 0
+		for _, cmd := range *handles {
+			payload[i] = cmd.DGInfo
+			i++
 		}
-		registeredCommands[cur] = rcmd
-		cur++
+		registeredCommands, err = dgSession.ApplicationCommandBulkOverwrite(dgSession.State.User.ID, "", payload)
+		if err != nil {
+			logger.Panic(fmt.Sprintf("Failed to create commands: %v", err), audit.LogGroup.BOT)
+		}
 	}
 
 	session = &Session{
@@ -111,13 +114,4 @@ func EndSession(session *Session) {
 		}
 		session.Logger.Add("Session ended", audit.LogGroup.BOT)
 	}()
-	// 8. Clean up and remove commands upon shutdown
-	dgSession := session.DGSession
-
-	for _, cmd := range session.Registers {
-		err := dgSession.ApplicationCommandDelete(dgSession.State.User.ID, "", cmd.ID)
-		if err != nil {
-			session.Logger.Warn(fmt.Sprintf("Cannot delete '%v' command: %v", cmd.Name, err), audit.LogGroup.BOT)
-		}
-	}
 }

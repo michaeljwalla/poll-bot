@@ -2,6 +2,7 @@ package commands
 
 import (
 	"poll-bot/root/commands/alias"
+	"poll-bot/root/commands/loadchannel"
 	"poll-bot/root/commands/modrank"
 	"poll-bot/root/commands/ping"
 	"poll-bot/root/commands/rank"
@@ -32,6 +33,7 @@ func init() {
 		rank.Register,
 		rate.Register,
 		status.Register,
+		loadchannel.Register,
 	}
 }
 func Register(reqs RegisterReqs) *types.BotCommandPackage {

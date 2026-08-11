@@ -55,8 +55,16 @@ func New(path string) (*PollManager, error) {
 func (man *PollManager) Write() error { return man.queue.SyncWrite() }
 func (man *PollManager) Read() error  { return man.queue.SyncRead() }
 
-func (man *PollManager) Push(value Poll) error {
-	return man.queue.Push(value)
+// pushing once is O(logn)
+//
+// pushing multiple initiates re-heapify O(n)
+func (man *PollManager) Push(value ...Poll) error {
+	if len(value) == 0 {
+		return nil
+	} else if len(value) == 1 {
+		return man.queue.Push(value[0])
+	}
+	return man.queue.Merge(value...)
 }
 func (man *PollManager) Pop() (Poll, error) {
 	return man.queue.Pop()

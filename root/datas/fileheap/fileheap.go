@@ -106,6 +106,16 @@ func (heap *FileHeap[K]) Pop() (K, error) {
 	return heaps.Pop(&heap.inner).(K), nil
 }
 
+func (heap *FileHeap[K]) Merge(value ...K) error {
+	if err := heap.lockOrClosed(); err != nil {
+		return err
+	}
+	defer heap.mutex.Unlock()
+	heap.inner.data = append(heap.inner.data, value...)
+	heaps.Init(&heap.inner)
+	return nil
+}
+
 func (heap *FileHeap[K]) Peek() (K, bool) {
 	heap.mutex.RLock()
 	defer heap.mutex.RUnlock()

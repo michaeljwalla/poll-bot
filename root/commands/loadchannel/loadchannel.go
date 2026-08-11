@@ -119,7 +119,7 @@ func Register(bcp *types.BotCommandPackage) {
 
 			var pollsFound []*discordgo.Message //use the message bc it holds more metadata
 			var messages_searched int
-			var oldest_message *discordgo.Message
+			var oldest_message *discordgo.Message //default to self!
 			//busy atomic in manager should help w debounce
 			err := bcp.Components.Register("load", components.NewComponentCallbacks(uid, map[string]components.Callback{
 				"load-start": func(i *discordgo.InteractionCreate) (bool, error) {
@@ -192,7 +192,7 @@ func Register(bcp *types.BotCommandPackage) {
 					//query "loop"
 					var msgs []*discordgo.Message
 					if err == nil {
-						msgs, err = s.ChannelMessages(i.ChannelID, 100, i.ID, "", "")
+						msgs, err = s.ChannelMessages(i.ChannelID, 100, oldest_message.ID, "", "")
 					}
 
 					if err != nil {
@@ -249,30 +249,25 @@ func Register(bcp *types.BotCommandPackage) {
 					}
 
 					//notify & clear options
-					pushErrs := make([]error, 0, len(pollsFound))
-					for _, msg := range pollsFound {
-						err := bcp.Polls.Push(polls.Poll{
-							Message: msg,
+					pollsBuffer := make([]polls.Poll, len(pollsFound))
+					for j, msg := range pollsFound {
+						pollsBuffer[j] = polls.Poll{
 							Expiry:  msg.Poll.Expiry,
+							Message: msg,
 							Guild:   i.GuildID,
-						})
-						if err != nil {
-							pushErrs = append(pushErrs, err)
 						}
 					}
-					errWrite := bcp.Polls.Write()
 
 					var msg string
-					if errWrite == nil {
-						if len(pushErrs) == 0 {
-							msg = fmt.Sprintf("Added %d polls to the queue heap for processing... no errors!", len(pollsFound)-len(pushErrs))
-						} else {
-							msg = fmt.Sprintf("Added %d polls to the queue heap for processing... %d others couldn't be pushed.", len(pollsFound)-len(pushErrs), len(pushErrs))
-						}
+					var err error
+					if err = bcp.Polls.Push(pollsBuffer...); err != nil {
+						msg = fmt.Sprintf("Couldn't push to heap: %v", err)
 					} else {
-						msg = fmt.Sprintf("Couldn't sync file automatically, this session may not save.\n%d polls added to the queue heap... %d others couldn't be pushed.", len(pollsFound)-len(pushErrs), len(pushErrs))
+						if err = bcp.Polls.Write(); err != nil {
+							msg = "Couldn't write data to file, this session may not save." + "\n"
+						}
+						msg += fmt.Sprintf("Added %d polls to the queue heap for processing", len(pollsFound))
 					}
-					emptyComponents := make([]discordgo.MessageComponent, 0)
 					// TODO
 					// make a translator func for discordgo.Message bc its unnecessarily large
 					// for this use case.
@@ -281,14 +276,16 @@ func Register(bcp *types.BotCommandPackage) {
 					// some form of chunking.
 					// also need to store each message ID too... maybe JUST store the message
 					// id instead of poll id.
-
+					emptyComponents := make([]discordgo.MessageComponent, 0)
 					_, errSend := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 						Content:    &msg,
 						Components: &emptyComponents,
 					})
 					//
-					if len(pushErrs) > 0 || errSend != nil || errWrite != nil {
-						return true, fmt.Errorf("in close() of loadchannel:\n\terr send?: %v\n\terr write?: %v\n\terrs mempushed?: %d", errWrite, errSend, len(pushErrs))
+					if err != nil {
+						return true, fmt.Errorf("in close() of loadchannel: %v", err)
+					} else if errSend != nil {
+						return true, fmt.Errorf("in close() of loadchannel on message: %v", errSend)
 					} else {
 						return true, nil
 					}

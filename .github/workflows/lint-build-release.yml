@@ -45,7 +45,7 @@ jobs:
           GOOS: linux
           CGO_ENABLED: 0
           GOARCH: amd64
-        run: go build -o main -ldflags "-X 'poll-bot/src/version.version=${{ github.ref_name }}' -X 'poll-bot/src/version.source=https://api.github.com/repos/michaeljwalla/poll-bot/releases'"
+        run: go build -o main -ldflags "-X 'poll-bot/root/info/version.version=${{ github.ref_name }}' -X 'poll-bot/root/info/version.source=https://api.github.com/repos/michaeljwalla/poll-bot/releases'"
       
       - name: compress
         run: tar -czvf ${{ env.BIN_NAME }}-${{ github.ref_name }}.tar.gz ./main

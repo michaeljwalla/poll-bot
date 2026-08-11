@@ -78,13 +78,18 @@ The oldest fetched poll will be linked for reference how far back has been index
 -# -> %s`, "`Start`", expiry)
 	return &str
 }
-func genSuccessQueryMessage(i *discordgo.InteractionCreate, num_polls int, num_messages int, msg *discordgo.Message) (message *string) {
+func genSuccessQueryMessage(state *iState) (message *string) {
+	i := state.interaction
+	msg := state.query.oldest
 	_, expiry := genInteractionExpireMessage(i)
 	msg_link := fmt.Sprintf("https://discord.com/channels/%s/%s/%s", i.GuildID, msg.ChannelID, msg.ID)
+	query := state.query
 
-	str := fmt.Sprintf(`### Fetched %d messages and found %d polls.
-Oldest message %s from <t:%d:f>
--# -> %s`, num_messages, num_polls,
+	new_polls := len(query.polls)
+	total_polls := new_polls + query.ignored
+	str := fmt.Sprintf(`### Fetched %d messages and found %d polls (%d new).
+Oldest message %s from <t:%d:R>
+-# -> %s`, state.query.searched, total_polls, new_polls,
 		msg_link, timestamp(msg.ID),
 		expiry)
 	return &str

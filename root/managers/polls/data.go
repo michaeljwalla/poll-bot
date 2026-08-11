@@ -18,7 +18,7 @@ func (man *PollManager) Push(values ...Poll) (dupes int, err error) {
 	pruned := make([]Poll, 0, len(values))
 	var dropped int
 	for _, poll := range values {
-		if !man.set.TryInsert(poll.Message.GuildID) {
+		if !man.set.TryInsert(poll.Message.ID) {
 			dropped++
 			continue
 		}

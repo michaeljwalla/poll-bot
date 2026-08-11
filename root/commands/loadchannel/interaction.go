@@ -128,7 +128,7 @@ func iLoadContinue(s *session, state *iState) (bool, error) {
 	//update buttons to allow continuation
 	components = buttons("Continue", "Stop & Save", list("load-continue", "load-stop"), list(false, false))
 	_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-		Content:    genSuccessQueryMessage(i, len(query.polls), query.searched, query.oldest),
+		Content:    genSuccessQueryMessage(state),
 		Components: components,
 	})
 	return false, err
@@ -136,12 +136,9 @@ func iLoadContinue(s *session, state *iState) (bool, error) {
 func iLoadStop(s *session, state *iState) (bool, error) {
 	i := state.interaction
 	stopped := &state.stopped
-	//lastIntxn, thisIntxn := state.lastInteract.Load(), timestamp(i.ID)
 	if stopped.Load() {
 		return true, canceledResponse(s, i)
-	} /*else if !lastIntxnUpdate.CompareAndSwap(lastIntxn, thisIntxn) {
-		return true, nil //close
-	}*/
+	}
 	return true, nil
 }
 func iClose(s *session, state *iState) (bool, error) {
@@ -178,15 +175,18 @@ func iClose(s *session, state *iState) (bool, error) {
 		}
 		msg += fmt.Sprintf("Added %d polls to the queue heap for processing", len(query.polls))
 	}
+	msg += "\n-# This interaction has ended."
 	// TODO
 	// make a translator func for discordgo.Message bc its unnecessarily large
 	// for this use case.
 	// write to external data that isn't the queue. may need to do
 	// some form of chunking.
-	emptyComponents := make([]discordgo.MessageComponent, 0)
+
+	// to remove options
+	empty := list[discordgo.MessageComponent]()
 	_, errSend := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 		Content:    &msg,
-		Components: &emptyComponents,
+		Components: &empty,
 	})
 	//
 	if err != nil {

@@ -2,7 +2,6 @@ package polls
 
 import (
 	fh "poll-bot/root/datas/fileheap"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -10,7 +9,7 @@ import (
 )
 
 const (
-	QUEUE_SUBPATH   = "queue.txt"
+	QUEUE_SUBPATH   = "queue.json"
 	RATINGS_SUBPATH = "ratings.csv"
 	MISC_SUBDIR     = "misc/"
 	RATINGS_SUBDIR  = "ratings/"
@@ -19,10 +18,9 @@ const (
 type snowflake = string
 
 type Poll struct {
-	Message snowflake
-	Channel snowflake
-	Guild   snowflake
 	Expiry  *time.Time
+	Message *discordgo.Message
+	Guild   snowflake //its an extra api request from Message
 }
 type PollManager struct {
 	queue   *fh.FileHeap[Poll]
@@ -41,13 +39,7 @@ func less(l *Poll, r *Poll) bool {
 }
 
 func validate(poll *Poll) bool {
-	if _, err := strconv.Atoi(poll.Message); err != nil {
-		return false
-	}
-	if _, err := strconv.Atoi(poll.Channel); err != nil {
-		return false
-	}
-	return poll.Expiry != nil
+	return poll.Expiry != nil && poll.Message != nil && poll.Guild != ""
 }
 func New(path string) (*PollManager, error) {
 	table, err := fh.New(path+QUEUE_SUBPATH, less, validate)

@@ -10,6 +10,7 @@ import (
 	"poll-bot/root/commands/status"
 	"poll-bot/root/managers/aliases"
 	"poll-bot/root/managers/authorize"
+	"poll-bot/root/managers/components"
 	"poll-bot/root/managers/polls"
 	"poll-bot/root/types"
 )
@@ -18,9 +19,10 @@ type CommandInfo = types.CommandInfo
 type EventCallback = types.EventCallback
 
 type RegisterReqs struct {
-	Aliases *aliases.AliasManager
-	Auth    *authorize.AuthManager
-	Polls   *polls.PollManager
+	Aliases    *aliases.AliasManager
+	Auth       *authorize.AuthManager
+	Polls      *polls.PollManager
+	Components *components.ComponentCallbackManager
 }
 
 var registers []func(*types.BotCommandPackage)
@@ -39,10 +41,11 @@ func init() {
 func Register(reqs RegisterReqs) *types.BotCommandPackage {
 	handles := make(map[string]CommandInfo)
 	bcp := types.BotCommandPackage{
-		Handles: &handles,
-		Aliases: reqs.Aliases,
-		Auth:    reqs.Auth,
-		Polls:   reqs.Polls,
+		Handles:    &handles,
+		Aliases:    reqs.Aliases,
+		Auth:       reqs.Auth,
+		Polls:      reqs.Polls,
+		Components: reqs.Components,
 	}
 
 	for _, reg := range registers {

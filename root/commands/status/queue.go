@@ -3,7 +3,6 @@ package status
 import (
 	"fmt"
 	"poll-bot/root/datas/set"
-	"poll-bot/root/info/unix"
 	"poll-bot/root/managers/polls"
 	"poll-bot/root/types"
 
@@ -78,7 +77,7 @@ func (pf *pollFormatted) Stringify() (msg string, link string) {
 		message += "(closed)"
 	} else {
 		if pf.id_data.Expiry != nil {
-			message += fmt.Sprintf(" (open until <t:%s>)", unix.TimeToSnowflake(*pf.id_data.Expiry))
+			message += fmt.Sprintf(" (open until <t:%d>)", pf.id_data.Expiry.Unix()) //why does <t: use unix but everything else use their dumb ahh snowflake
 		} else {
 			message += " open until (???)"
 		}
@@ -92,7 +91,7 @@ func (pf *pollFormatted) Stringify() (msg string, link string) {
 	//
 
 	return message,
-		fmt.Sprintf("https://discord.com/channels/%s/%s/%s", pf.id_data.Guild, pf.id_data.Channel, pf.id_data.Message)
+		fmt.Sprintf("https://discord.com/channels/%s/%s/%s", pf.id_data.Guild, pf.id_data.Message.ChannelID, pf.id_data.Message.ID)
 }
 func cmd_view_queue(s session, i intxn, bcp bcpackage) error {
 	top, poll, count, err := view_queue(bcp)
@@ -109,10 +108,10 @@ func cmd_view_queue(s session, i intxn, bcp bcpackage) error {
 			return fmt.Errorf("no Poll on %v", top)
 		}
 		str, link := formatted.Stringify()
-		message = fmt.Sprintf(`### Next: %s
+		message = fmt.Sprintf(`### Next to expire: %s
 %s
 
-### Total queued: %d
+### Total enqueued: %d
 -# *the queue heap only guarantees the topmost is sorted
 -# *polls which haven't closed yet will appear here to be processed.`, link, str, count)
 	}

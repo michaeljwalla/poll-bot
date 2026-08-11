@@ -12,6 +12,7 @@ import (
 	"poll-bot/root/managers/aliases"
 	"poll-bot/root/managers/audit"
 	"poll-bot/root/managers/authorize"
+	"poll-bot/root/managers/components"
 	"poll-bot/root/managers/polls"
 	"strings"
 	"syscall"
@@ -128,9 +129,10 @@ func main() {
 	checkForUpdates()
 
 	commands := commands.Register(commands.RegisterReqs{
-		Aliases: getManAliases(),
-		Auth:    getManAuth(),
-		Polls:   getManPolls(),
+		Aliases:    getManAliases(),
+		Auth:       getManAuth(),
+		Polls:      getManPolls(),
+		Components: components.New(),
 	})
 
 	defer commands.Aliases.Close() //nolint

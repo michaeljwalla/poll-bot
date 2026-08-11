@@ -36,10 +36,21 @@ func rebuildCommand(c *discordgo.ApplicationCommandInteractionData) string {
 	return strings.Join(args, " ")
 }
 
+func ack(s *discordgo.Session, i *discordgo.InteractionCreate, logger *audit.Log, value discordgo.InteractionResponseType) {
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: value,
+	})
+	if err != nil {
+		logger.Warn(fmt.Sprintf("failed to defer: %s", err), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+		return
+	}
+}
+
 // 2. Initialize a new Discord
 // TODO aliases and auth are now in Commands. fix the type errors
 func Start(instr StartInstructions) (session *Session, err error) {
-	token, handles, logger, aliases, auth := instr.Token, instr.Commands.Handles, instr.Logger, instr.Commands.Aliases, instr.Commands.Auth
+	token, handles, logger, aliases, auth, components :=
+		instr.Token, instr.Commands.Handles, instr.Logger, instr.Commands.Aliases, instr.Commands.Auth, instr.Commands.Components
 	dgSession, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return
@@ -52,28 +63,64 @@ func Start(instr StartInstructions) (session *Session, err error) {
 	// set perms "intents" & register gateway handler boilerplate
 	dgSession.Identify.Intents = discordgo.IntentsGuilds
 	dgSession.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		// if i.Type == discordgo.InteractionType(discordgo.InteractionContextGuild) {
-		// 	// Handle component interactions or autocomplete here if needed
-		// }
-		commandData := i.ApplicationCommandData()
-		var statusChar string
-		if handle, ok := (*handles)[commandData.Name]; ok {
+		switch i.Type {
+		case discordgo.InteractionApplicationCommand:
+			// ack(s, i, logger, discordgo.InteractionResponseDeferredChannelMessageWithSource)
+			//
+			commandData := i.ApplicationCommandData()
+			var statusChar string
+			if handle, ok := (*handles)[commandData.Name]; ok {
+				id := i.Member.User.ID
+
+				alias := aliases.GetAlias(id)
+				cmd := rebuildCommand(&commandData)
+				var callback types.EventCallback
+				if !auth.CanUse(id, handle.Metadata.MinTrustLevel) {
+					statusChar = "❌"
+					callback = authorize.PermissionsErrorIntercept // TODO
+				} else {
+					statusChar = "✅"
+					callback = handle.Callback
+				}
+				logger.Add(fmt.Sprintf("%v %33s %02d %s| %s", id, alias, auth.GetRank(id), statusChar, cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+
+				if err := callback(s, i); err != nil {
+					logger.Warn(fmt.Sprintf("While handling %s: %v", rebuildCommand(&commandData), err), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+				}
+			}
+		case discordgo.InteractionMessageComponent:
+			ack(s, i, logger, discordgo.InteractionResponseDeferredMessageUpdate)
+			//
 			id := i.Member.User.ID
+			group, ok := components.GroupOf(id)
+			if !ok {
+				logger.Warn("no group assigned to this interaction.", audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+				return
+			}
 
 			alias := aliases.GetAlias(id)
-			cmd := rebuildCommand(&commandData)
-			var callback types.EventCallback
-			if !auth.CanUse(id, handle.Metadata.MinTrustLevel) {
+
+			componentData := i.MessageComponentData()
+			var statusChar string
+			metadata, err := components.GetMetadata(group)
+			if err != nil {
+				logger.Warn(err, audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+				return
+			}
+			canUse := auth.CanUse(id, (*handles)[metadata.FromHandle].Metadata.MinTrustLevel)
+			if !canUse {
 				statusChar = "❌"
-				callback = authorize.PermissionsErrorIntercept // TODO
 			} else {
 				statusChar = "✅"
-				callback = handle.Callback
 			}
-			logger.Add(fmt.Sprintf("%v %33s %02d %s| %s", id, alias, auth.GetRank(id), statusChar, cmd), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
-
-			if err := callback(s, i); err != nil {
-				logger.Warn(fmt.Sprintf("While handling %s: %v", rebuildCommand(&commandData), err))
+			logger.Add(fmt.Sprintf("%v %33s %02d %s| -> %s", id, alias, auth.GetRank(id), statusChar, componentData.CustomID), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+			if !canUse {
+				return
+			}
+			if busy, err := components.TryRun(i); err != nil {
+				logger.Warn(fmt.Sprintf("While handling Component %s: %v", componentData.CustomID, err), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+			} else if busy {
+				logger.Warn("Component command ignored (busy)", audit.LogGroup.BOT, audit.LogGroup.INTERACT)
 			}
 		}
 	})

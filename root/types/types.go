@@ -4,6 +4,7 @@ import (
 	"poll-bot/root/managers/aliases"
 	"poll-bot/root/managers/audit"
 	"poll-bot/root/managers/authorize"
+	"poll-bot/root/managers/components"
 	"poll-bot/root/managers/polls"
 
 	"github.com/bwmarrin/discordgo"
@@ -21,10 +22,11 @@ type CommandInfo struct {
 }
 
 type BotCommandPackage struct {
-	Handles *map[string]CommandInfo
-	Aliases *aliases.AliasManager
-	Auth    *authorize.AuthManager
-	Polls   *polls.PollManager
+	Handles    *map[string]CommandInfo
+	Aliases    *aliases.AliasManager
+	Auth       *authorize.AuthManager
+	Polls      *polls.PollManager
+	Components *components.ComponentCallbackManager
 }
 
 type SessionCommandRegisters struct {

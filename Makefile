@@ -1,4 +1,4 @@
-.PHONY : init built up down logs dev
+.PHONY : init built up down logs dev update
 .DEFAULT_GOAL := build # -> just make
 
 # setup data/
@@ -15,6 +15,11 @@ build: init
 
 up: init
 	docker compose up -d
+
+update:
+	$(MAKE) down
+	git pull
+	$(MAKE) build
 
 down:
 	docker compose down

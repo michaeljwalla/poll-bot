@@ -8,6 +8,7 @@ import (
 	"poll-bot/root/commands/rank"
 	"poll-bot/root/commands/rate"
 	"poll-bot/root/commands/status"
+	"poll-bot/root/commands/version"
 	"poll-bot/root/managers/aliases"
 	"poll-bot/root/managers/authorize"
 	"poll-bot/root/managers/components"
@@ -36,6 +37,7 @@ func init() {
 		rate.Register,
 		status.Register,
 		loadchannel.Register,
+		version.Register,
 	}
 }
 func Register(reqs RegisterReqs) *types.BotCommandPackage {

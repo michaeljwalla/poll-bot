@@ -2,6 +2,7 @@ package status
 
 import (
 	"fmt"
+	"math"
 	"poll-bot/root/datas/set"
 	"poll-bot/root/managers/polls"
 	"poll-bot/root/types"
@@ -70,6 +71,11 @@ func fromMessage(msg *discordgo.Message, data poll) (formatted *pollFormatted, e
 	}
 	return
 }
+
+// with num, denom \in Z^+
+func roundPercentFrac(num int, denom int) int {
+	return int(math.Round(float64(num) / float64(denom) * 100))
+}
 func (pf *pollFormatted) Stringify() (msg string, link string) {
 	message := fmt.Sprintf("### `%s`", pf.title)
 	//
@@ -86,7 +92,7 @@ func (pf *pollFormatted) Stringify() (msg string, link string) {
 	if pf.num_votes == 0 {
 		message += "\n- Nobody has voted yet."
 	} else {
-		message += fmt.Sprintf("\nCurrent Votes:`%d`\nCurrent Winner(s):`%v` / %d%%", pf.num_votes, pf.best_choice, int(100*pf.best_num_votes/pf.num_votes))
+		message += fmt.Sprintf("\nCurrent Votes:`%d`\nCurrent Winner(s):`%v` / %d%%", pf.num_votes, pf.best_choice, roundPercentFrac(pf.best_num_votes, pf.num_votes))
 	}
 	//
 

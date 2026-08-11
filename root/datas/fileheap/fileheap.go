@@ -181,3 +181,20 @@ func (heap *FileHeap[K]) Close() error {
 	heap.closed.Store(true)
 	return heap.file.Close()
 }
+
+// for manual traversing (though usually not very helpful)
+func (heap *FileHeap[K]) Left(i int) (value K, ok bool) {
+	return heap.At(2*i + 1)
+}
+func (heap *FileHeap[K]) Right(i int) (value K, ok bool) {
+	return heap.At(2*i + 2)
+}
+func (heap *FileHeap[K]) Parent(i int) (value K, ok bool) {
+	return heap.At((i - 1) / 2) //int div floored
+}
+func (heap *FileHeap[K]) At(i int) (value K, ok bool) {
+	if i < 0 || i >= heap.Len() {
+		return
+	}
+	return heap.inner.data[i], true
+}

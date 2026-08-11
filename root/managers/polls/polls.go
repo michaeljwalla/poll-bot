@@ -2,6 +2,7 @@ package polls
 
 import (
 	fh "poll-bot/root/datas/fileheap"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -72,7 +73,36 @@ func (man *PollManager) Pop() (Poll, error) {
 func (man *PollManager) Peek() (Poll, bool) {
 	return man.queue.Peek()
 }
-
+func (man *PollManager) GetTopOrdered() ([]Poll, bool) {
+	iTop := 0
+	top, ok := man.queue.At(iTop)
+	if !ok {
+		return nil, false
+	}
+	data := make([]Poll, 0, 3)
+	data = append(data, top)
+	//
+	left, ok := man.queue.Left(iTop)
+	if ok {
+		data = append(data, left)
+	}
+	right, ok := man.queue.Right(iTop)
+	if ok {
+		data = append(data, right)
+	}
+	slices.SortFunc(data, func(a Poll, b Poll) int {
+		timeA := time.Time{}
+		timeB := time.Time{}
+		if a.Expiry != nil {
+			timeA = *a.Expiry
+		}
+		if b.Expiry != nil {
+			timeB = *b.Expiry
+		}
+		return timeA.Compare(timeB)
+	})
+	return data, true
+}
 func (man *PollManager) Close() error {
 	return man.queue.Close()
 }

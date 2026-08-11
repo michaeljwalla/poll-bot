@@ -12,16 +12,22 @@ import (
 
 type poll = polls.Poll
 
-func view_queue(bcp *types.BotCommandPackage) (msg *discordgo.Message, poll *polls.Poll, count int, err error) {
-	peek, ok := bcp.Polls.Peek()
+func view_queue(bcp *types.BotCommandPackage) (messages []*discordgo.Message, poll []polls.Poll, count int, err error) {
+	polls, ok := bcp.Polls.GetTopOrdered()
 	if !ok {
 		return nil, nil, 0, nil
 	}
-	msg, err = bcp.Polls.GetData(&peek)
-	if err != nil {
-		return nil, nil, -1, fmt.Errorf("on Polls.GetData (%v): %v", peek, err)
+
+	messages = make([]*discordgo.Message, len(polls))
+	for i, poll := range polls {
+		msg, err := bcp.Polls.GetData(&poll)
+		if err != nil {
+			return nil, nil, -1, fmt.Errorf("on Polls.GetData (%v): %v", poll, err)
+		}
+		messages[i] = msg
 	}
-	return msg, &peek, bcp.Polls.Len(), nil
+
+	return messages, polls, bcp.Polls.Len(), nil
 }
 
 type pollFormatted struct {
@@ -77,22 +83,24 @@ func roundPercentFrac(num int, denom int) int {
 	return int(math.Round(float64(num) / float64(denom) * 100))
 }
 func (pf *pollFormatted) Stringify() (msg string, link string) {
-	message := fmt.Sprintf("### `%s`", pf.title)
+	message := fmt.Sprintf("**`%s`**", pf.title)
 	//
-	if pf.finalized {
-		message += "(closed)"
-	} else {
-		if pf.id_data.Expiry != nil {
-			message += fmt.Sprintf(" (open until <t:%d>)", pf.id_data.Expiry.Unix()) //why does <t: use unix but everything else use their dumb ahh snowflake
+	if pf.id_data.Expiry != nil {
+		if pf.finalized {
+			message += fmt.Sprintf(" | closed <t:%d:R>", pf.id_data.Expiry.Unix())
 		} else {
-			message += " open until (???)"
+			message += fmt.Sprintf(" | until <t:%d>)", pf.id_data.Expiry.Unix()) //why does <t: use unix but everything else use their dumb ahh snowflake
 		}
 	}
 	//
 	if pf.num_votes == 0 {
-		message += "\n- Nobody has voted yet."
+		if pf.finalized {
+			message += "\n-# Nobody voted..."
+		} else {
+			message += "\n-# No votes yet."
+		}
 	} else {
-		message += fmt.Sprintf("\nCurrent Votes:`%d`\nCurrent Winner(s):`%v` / %d%%", pf.num_votes, pf.best_choice, roundPercentFrac(pf.best_num_votes, pf.num_votes))
+		message += fmt.Sprintf("\n-# Votes:`%d`\n-# Lead(s):`%v` / %d%%", pf.num_votes, pf.best_choice, roundPercentFrac(pf.best_num_votes, pf.num_votes))
 	}
 	//
 
@@ -100,7 +108,7 @@ func (pf *pollFormatted) Stringify() (msg string, link string) {
 		fmt.Sprintf("https://discord.com/channels/%s/%s/%s", pf.id_data.Guild, pf.id_data.Message.ChannelID, pf.id_data.Message.ID)
 }
 func cmd_view_queue(s session, i intxn, bcp bcpackage) error {
-	top, poll, count, err := view_queue(bcp)
+	tops, poll, count, err := view_queue(bcp)
 
 	var message string
 	if err != nil {
@@ -109,17 +117,19 @@ func cmd_view_queue(s session, i intxn, bcp bcpackage) error {
 		message = `The queue is empty.
 -# *polls which haven't closed yet will appear here to be processed.`
 	} else {
-		formatted, err := fromMessage(top, *poll)
-		if err != nil {
-			return fmt.Errorf("no Poll on %v", top)
+		var pollsPresent string
+		for i, msg := range tops {
+			formatted, err := fromMessage(msg, poll[i])
+			if err != nil {
+				return fmt.Errorf("no Poll on %v", msg)
+			}
+			str, link := formatted.Stringify()
+			pollsPresent += fmt.Sprintf("%s %s\n\n", link, str)
 		}
-		str, link := formatted.Stringify()
-		message = fmt.Sprintf(`### Next to expire: %s
-%s
 
-### Total enqueued: %d
--# *the queue heap only guarantees the topmost is sorted
--# *polls which haven't closed yet will appear here to be processed.`, link, str, count)
+		message = fmt.Sprintf(`### Next Up:
+%s**Total enqueued: %d**
+-# *polls which haven't closed yet will appear here to be processed.`, pollsPresent, count)
 	}
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,

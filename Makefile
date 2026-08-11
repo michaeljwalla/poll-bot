@@ -7,9 +7,8 @@ init:
 		echo ".env file not found"; \
 		exit 1; \
 	fi
-	mkdir -p ./data/logs/
-	[ -f ./data/aliases.json ] || echo '{}' > ./data/aliases.json 
-	[ -f ./data/auth.json ] || echo '{}' > ./data/auth.json 
+	mkdir -p ./data/logs/ ./data/polls/misc/ 
+
 
 build: init
 	docker compose build

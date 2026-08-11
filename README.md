@@ -1,16 +1,22 @@
 # poll-bot
 ## Dependencies
  - make
- - Docker / Docker compose
+ - Docker
 ## Setup
 1. clone repo
 2. setup .env and define `x_TOKENID` where `MODE=X`
     - ex, `MODE=DEV DEV_TOKENID=...`
 3. done
-## Using the Bot
+## Using Make
 ```sh
-make        # build (no cache)
+# updates
+make        # (re)build, fetches latest release
+
+# using
 make up     # start
 make down   # stop
+
+# debug
 make logs   # follow output live
+make dev    # uses go run instead of docker, MODE=DEV
 ```

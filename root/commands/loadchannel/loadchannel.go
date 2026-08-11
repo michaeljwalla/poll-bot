@@ -5,9 +5,7 @@ import (
 	"poll-bot/root/info/unix"
 	"poll-bot/root/managers/authorize"
 	"poll-bot/root/managers/components"
-	"poll-bot/root/managers/polls"
 	"poll-bot/root/types"
-	"sync/atomic"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -22,7 +20,7 @@ var metadata = types.CommandMetadata{
 const FETCHING_TIMEOUT_S = 30
 const INTERACTION_IDLE_TIMEOUT_S = 90
 
-func buttons(loadBegin string, stop string, id [2]string, disabled [2]bool) *[]discordgo.MessageComponent {
+func buttons(loadBegin string, stop string, id []string, disabled []bool) *[]discordgo.MessageComponent {
 	return &[]discordgo.MessageComponent{
 		discordgo.ActionsRow{
 			Components: []discordgo.MessageComponent{
@@ -101,8 +99,6 @@ func Register(bcp *types.BotCommandPackage) {
 		FromHandle:         "load",
 	})
 
-	//states are messed up a bit, this will help with wrong-intxn stuff
-	lastIntxnUpdate := atomic.Uint64{}
 	(*bcp.Handles)["load"] = CommandInfo{
 		DGInfo: &discordgo.ApplicationCommand{
 			Name:        "load",
@@ -110,195 +106,14 @@ func Register(bcp *types.BotCommandPackage) {
 		},
 		Metadata: metadata,
 		Callback: func(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-			// channel := i.ChannelID
-			stopped := atomic.Bool{}
-
-			lastIntxnUpdate.Store(timestamp(i.ID))
-
-			uid := i.Member.User.ID
-
-			var pollsFound []*discordgo.Message //use the message bc it holds more metadata
-			var messages_searched int
-			var oldest_message *discordgo.Message //default to self!
-			//busy atomic in manager should help w debounce
-			err := bcp.Components.Register("load", components.NewComponentCallbacks(uid, map[string]components.Callback{
-				"load-start": func(i *discordgo.InteractionCreate) (bool, error) {
-					lastIntxn, thisIntxn := lastIntxnUpdate.Load(), timestamp(i.ID)
-					if stopped.Load() {
-						return false, canceledResponse(s, i)
-					} else if expired(thisIntxn, lastIntxn, INTERACTION_IDLE_TIMEOUT_S) || !lastIntxnUpdate.CompareAndSwap(lastIntxn, thisIntxn) {
-						return true, canceledResponse(s, i) //close
-					}
-
-					//pass next round to load-continue
-					components := buttons("Continue", "Stop & Save", [2]string{"load-continue", "load-stop"}, [2]bool{true, true})
-					_, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-						Content:    genContinueMessage(i),
-						Components: components,
-					})
-
-					//query "loop"
-					var msgs []*discordgo.Message
-					if err == nil {
-						msgs, err = s.ChannelMessages(i.ChannelID, 100, i.ID, "", "")
-					}
-
-					if err != nil {
-						str := "I couldn't fetch the messages here, sorry."
-						components := buttons("Retry", "Stop & Save", [2]string{"load-continue", "load-stop"}, [2]bool{false, false})
-						_, errMsg := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-							Content:    &str,
-							Components: components,
-						})
-						return false, fmt.Errorf("query error: %v\nmessage error(?): %v", err, errMsg)
-					}
-					//check stopped/expired after fetch
-					if stopped.Load() {
-						return false, nil // already called prior, should be impossible here actually
-					} else if expired(thisIntxn, lastIntxn, FETCHING_TIMEOUT_S) {
-						return true, nil //close
-					}
-					//filter
-					for _, msg := range msgs {
-						messages_searched++
-						oldest_message = msg
-						if msg.Poll == nil {
-							continue
-						}
-						pollsFound = append(pollsFound, msg)
-					}
-
-					//update buttons to allow continuation
-					components = buttons("Continue", "Stop & Save", [2]string{"load-continue", "load-stop"}, [2]bool{false, false})
-					_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-						Content:    genSuccessQueryMessage(i, len(pollsFound), messages_searched, oldest_message),
-						Components: components,
-					})
-					return false, err
-				},
-				"load-continue": func(i *discordgo.InteractionCreate) (bool, error) {
-					lastIntxn, thisIntxn := lastIntxnUpdate.Load(), timestamp(i.ID)
-					if stopped.Load() {
-						return false, canceledResponse(s, i)
-					} else if expired(thisIntxn, lastIntxn, INTERACTION_IDLE_TIMEOUT_S) {
-						return true, canceledResponse(s, i) //close
-					}
-					components := buttons("Continue", "Stop", [2]string{"load-continue", "load-stop"}, [2]bool{true, true})
-					_, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-						Content:    genContinueMessage(i),
-						Components: components,
-					})
-
-					//query "loop"
-					var msgs []*discordgo.Message
-					if err == nil {
-						msgs, err = s.ChannelMessages(i.ChannelID, 100, oldest_message.ID, "", "")
-					}
-
-					if err != nil {
-						str := "I couldn't fetch the messages here, sorry."
-						components := buttons("Retry", "Stop & Save", [2]string{"load-continue", "load-stop"}, [2]bool{false, false})
-						_, errMsg := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-							Content:    &str,
-							Components: components,
-						})
-						return false, fmt.Errorf("query error: %v\nmessage error(?): %v", err, errMsg)
-					}
-					//check stopped/expired after fetch
-					if stopped.Load() {
-						return false, nil // already called prior, should be impossible here actually
-					} else if expired(thisIntxn, lastIntxn, FETCHING_TIMEOUT_S) {
-						return true, nil //close
-					}
-					//filter
-					for _, msg := range msgs {
-						messages_searched++
-						oldest_message = msg
-						if msg.Poll == nil {
-							continue
-						}
-						pollsFound = append(pollsFound, msg)
-					}
-
-					components = buttons("Continue", "Stop & Save", [2]string{"load-continue", "load-stop"}, [2]bool{false, false})
-					_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-						Content:    genSuccessQueryMessage(i, len(pollsFound), messages_searched, oldest_message),
-						Components: components,
-					})
-
-					return false, err
-				},
-				"load-stop": func(i *discordgo.InteractionCreate) (bool, error) {
-					lastIntxn, thisIntxn := lastIntxnUpdate.Load(), timestamp(i.ID)
-					if stopped.Load() {
-						return true, canceledResponse(s, i)
-					} else if !lastIntxnUpdate.CompareAndSwap(lastIntxn, thisIntxn) {
-						return true, nil //close
-					}
-
-					return true, nil
-				},
-				//close only gets nil, pass through local state to access
-				"close": func(i *discordgo.InteractionCreate) (bool, error) {
-					if !stopped.CompareAndSwap(false, true) || i == nil { //acts as a debounce too
-						return true, nil
-					}
-					//attempt to save data
-					if len(pollsFound) == 0 {
-						return true, canceledResponse(s, i)
-					}
-
-					//notify & clear options
-					pollsBuffer := make([]polls.Poll, len(pollsFound))
-					for j, msg := range pollsFound {
-						pollsBuffer[j] = polls.Poll{
-							Expiry:  msg.Poll.Expiry,
-							Message: msg,
-							Guild:   i.GuildID,
-						}
-					}
-
-					var msg string
-					var err error
-					if err = bcp.Polls.Push(pollsBuffer...); err != nil {
-						msg = fmt.Sprintf("Couldn't push to heap: %v", err)
-					} else {
-						if err = bcp.Polls.Write(); err != nil {
-							msg = "Couldn't write data to file, this session may not save." + "\n"
-						}
-						msg += fmt.Sprintf("Added %d polls to the queue heap for processing", len(pollsFound))
-					}
-					// TODO
-					// make a translator func for discordgo.Message bc its unnecessarily large
-					// for this use case.
-					// filter dupes (may need a filedict alongside the heap!)
-					// write to external data that isn't the queue. may need to do
-					// some form of chunking.
-					// also need to store each message ID too... maybe JUST store the message
-					// id instead of poll id.
-					emptyComponents := make([]discordgo.MessageComponent, 0)
-					_, errSend := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-						Content:    &msg,
-						Components: &emptyComponents,
-					})
-					//
-					if err != nil {
-						return true, fmt.Errorf("in close() of loadchannel: %v", err)
-					} else if errSend != nil {
-						return true, fmt.Errorf("in close() of loadchannel on message: %v", errSend)
-					} else {
-						return true, nil
-					}
-				},
-			}))
-			if err != nil {
+			if err := createInteractionSession(bcp, s, i); err != nil {
 				return err
 			}
 			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content:    *genStartupMessage(i),
-					Components: *buttons("Start", "Stop", [2]string{"load-start", "load-stop"}, [2]bool{false, false}),
+					Components: *buttons("Start", "Stop", list("load-continue", "load-stop"), list(false, false)),
 				},
 			})
 		},

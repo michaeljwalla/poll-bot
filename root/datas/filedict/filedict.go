@@ -22,10 +22,10 @@ type FileDict[K comparable, V any] struct {
 
 var ErrIsClosed = errors.New("the FileDict is closed")
 
-const FILE_TIMEOUT_MS time.Duration = 5000
+const FILE_TIMEOUT time.Duration = 5000 * time.Millisecond
 
 func newDBWithSchema(path string) (*sqlite.SQLiteDB, error) {
-	db, err := sqlite.New(path, FILE_TIMEOUT_MS)
+	db, err := sqlite.New(path, FILE_TIMEOUT)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (table *FileDict[K, V]) SyncWrite() error {
 	for k, v := range table.data {
 		jsonData, err := json.Marshal(&v)
 		if err != nil {
-			return fmt.Errorf("While marshaling %v: %v", v, err)
+			return fmt.Errorf("while marshaling %v: %v", v, err)
 		}
 		parts = append(parts, "(?, ?)")
 		args = append(args, k, jsonData)
@@ -110,7 +110,7 @@ func (table *FileDict[K, V]) SyncRead() error {
 	if err != nil {
 		return err
 	}
-	defer iter.Close()
+	defer iter.Close() //nolint
 
 	table.data = make(map[K]V)
 	for {

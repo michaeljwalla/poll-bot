@@ -42,10 +42,10 @@ type FileHeap[K any] struct {
 
 var ErrIsClosed = errors.New("the FileHeap is closed")
 
-const FILE_TIMEOUT_MS time.Duration = 5000
+const FILE_TIMEOUT time.Duration = 5000
 
 func newDBWithSchema(path string) (*sqlite.SQLiteDB, error) {
-	db, err := sqlite.New(path, FILE_TIMEOUT_MS)
+	db, err := sqlite.New(path, FILE_TIMEOUT)
 	if err != nil {
 		return nil, err
 	}
@@ -109,12 +109,12 @@ func (heap *FileHeap[K]) Push(value K) error {
 
 	jsonData, err := json.Marshal(&value)
 	if err != nil {
-		return fmt.Errorf("While marshaling %v: %v", value, err)
+		return fmt.Errorf("while marshaling %v: %v", value, err)
 	}
 	hash := sha256.Sum256(jsonData)
 	_, err = heap.file.Exec(`REPLACE INTO data (hash, data) VALUES (?, ?);`, hash[:], jsonData)
 	if err != nil {
-		return fmt.Errorf("While inserting into DB %v: %v", value, err)
+		return fmt.Errorf("while inserting into DB %v: %v", value, err)
 	}
 	return err
 }
@@ -132,7 +132,7 @@ func (heap *FileHeap[K]) Pop() (K, error) {
 	value := heaps.Pop(&heap.inner).(K)
 	jsonData, err := json.Marshal(&value)
 	if err != nil {
-		return value, fmt.Errorf("While marshaling %v: %v", value, err)
+		return value, fmt.Errorf("while marshaling %v: %v", value, err)
 	}
 	hash := sha256.Sum256(jsonData)
 	_, err = heap.file.Exec(`DELETE FROM data WHERE hash = ?;`, hash[:])
@@ -152,7 +152,7 @@ func (heap *FileHeap[K]) Merge(value ...K) error {
 	for i, val := range value {
 		jsonData, err := json.Marshal(&val)
 		if err != nil {
-			return fmt.Errorf("While marshaling %v: %v", value, err)
+			return fmt.Errorf("while marshaling %v: %v", value, err)
 		}
 		hash := sha256.Sum256(jsonData)
 		data = append(data, hash[:], jsonData)
@@ -189,7 +189,7 @@ func (heap *FileHeap[K]) read() error {
 	if err != nil {
 		return err
 	}
-	defer iter.Close()
+	defer iter.Close() //nolint
 
 	heap.inner.data = heap.inner.data[:0]
 	//loading from db

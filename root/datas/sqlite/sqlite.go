@@ -11,24 +11,19 @@ import (
 )
 
 type SQLiteDB struct {
-	instance  *sql.DB
-	path      string
-	open      *atomic.Bool
-	timeoutMs time.Duration
+	instance *sql.DB
+	path     string
+	open     *atomic.Bool
+	timeout  time.Duration
 }
 
-type Record struct {
-	row  *sql.Rows
-	used *atomic.Bool
-}
-
-func New(path string, timeoutMs time.Duration) (*SQLiteDB, error) {
+func New(path string, timeout time.Duration) (*SQLiteDB, error) {
 	db, err := sql.Open("sqlite", path)
 	data := &SQLiteDB{
-		instance:  db,
-		path:      path,
-		timeoutMs: timeoutMs,
-		open:      &atomic.Bool{},
+		instance: db,
+		path:     path,
+		timeout:  timeout,
+		open:     &atomic.Bool{},
 	}
 	if err == nil {
 		data.open.Store(true)
@@ -50,7 +45,7 @@ func (db *SQLiteDB) Exec(query string, args ...any) (*sql.Result, error) {
 	if !db.IsOpen() {
 		return nil, errors.New("connection closed")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), db.timeoutMs*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), db.timeout)
 	defer cancel()
 	//
 	result, err := db.instance.ExecContext(ctx, query, args...)
@@ -83,7 +78,7 @@ func (db *SQLiteDB) Query(query string, args ...any) (*Iter, error) {
 		return nil, errors.New("connection closed")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), db.timeoutMs*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), db.timeout)
 
 	rows, err := db.instance.QueryContext(ctx, query, args...)
 	if err != nil {

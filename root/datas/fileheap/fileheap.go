@@ -2,14 +2,15 @@ package fileheap
 
 import (
 	heaps "container/heap"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"iter"
-	"os"
+	"poll-bot/root/datas/sqlite"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // inner type satisfies heap.Interface. Kept unexported so callers use
@@ -32,16 +33,31 @@ func (h *fileHeapInner[K]) Pop() any {
 
 // Just define less for your type
 type FileHeap[K any] struct {
-	inner   fileHeapInner[K]
-	path    string
-	encoder *json.Encoder
-	file    *os.File
-	mutex   sync.RWMutex
-	closed  *atomic.Bool
+	inner  fileHeapInner[K]
+	path   string
+	file   *sqlite.SQLiteDB
+	mutex  sync.RWMutex
+	closed *atomic.Bool
 }
 
 var ErrIsClosed = errors.New("the FileHeap is closed")
 
+const FILE_TIMEOUT_MS time.Duration = 5000
+
+func newDBWithSchema(path string) (*sqlite.SQLiteDB, error) {
+	db, err := sqlite.New(path, FILE_TIMEOUT_MS)
+	if err != nil {
+		return nil, err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS data (
+		hash BLOB PRIMARY KEY,
+		data BLOB NOT NULL
+	);`)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
 func New[K any](path string, less func(*K, *K) bool, validate func(*K) bool) (*FileHeap[K], error) {
 	heap := FileHeap[K]{
 		inner: fileHeapInner[K]{
@@ -51,13 +67,12 @@ func New[K any](path string, less func(*K, *K) bool, validate func(*K) bool) (*F
 		path:   path,
 		closed: &atomic.Bool{},
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
+	file, err := newDBWithSchema(path)
 	if err != nil {
 		return nil, err
 	}
 	heap.file = file
-	heap.encoder = json.NewEncoder(file)
-	if err := heap.SyncRead(); err != nil {
+	if err := heap.read(); err != nil {
 		return nil, err
 	}
 	for _, v := range heap.inner.data {
@@ -91,7 +106,17 @@ func (heap *FileHeap[K]) Push(value K) error {
 	}
 	defer heap.mutex.Unlock()
 	heaps.Push(&heap.inner, value)
-	return nil
+
+	jsonData, err := json.Marshal(&value)
+	if err != nil {
+		return fmt.Errorf("While marshaling %v: %v", value, err)
+	}
+	hash := sha256.Sum256(jsonData)
+	_, err = heap.file.Exec(`REPLACE INTO data (hash, data) VALUES (?, ?);`, hash[:], jsonData)
+	if err != nil {
+		return fmt.Errorf("While inserting into DB %v: %v", value, err)
+	}
+	return err
 }
 
 func (heap *FileHeap[K]) Pop() (K, error) {
@@ -103,7 +128,15 @@ func (heap *FileHeap[K]) Pop() (K, error) {
 	if heap.inner.Len() == 0 {
 		return zero, nil
 	}
-	return heaps.Pop(&heap.inner).(K), nil
+	//
+	value := heaps.Pop(&heap.inner).(K)
+	jsonData, err := json.Marshal(&value)
+	if err != nil {
+		return value, fmt.Errorf("While marshaling %v: %v", value, err)
+	}
+	hash := sha256.Sum256(jsonData)
+	_, err = heap.file.Exec(`DELETE FROM data WHERE hash = ?;`, hash[:])
+	return value, err
 }
 
 func (heap *FileHeap[K]) Merge(value ...K) error {
@@ -113,7 +146,26 @@ func (heap *FileHeap[K]) Merge(value ...K) error {
 	defer heap.mutex.Unlock()
 	heap.inner.data = append(heap.inner.data, value...)
 	heaps.Init(&heap.inner)
-	return nil
+
+	data := make([]any, 0, len(value)*2)
+	query := `REPLACE INTO data (hash, data) VALUES`
+	for i, val := range value {
+		jsonData, err := json.Marshal(&val)
+		if err != nil {
+			return fmt.Errorf("While marshaling %v: %v", value, err)
+		}
+		hash := sha256.Sum256(jsonData)
+		data = append(data, hash[:], jsonData)
+		//
+		query += " (?, ?)"
+		if i != len(value)-1 {
+			query += ", "
+		} else {
+			query += ";"
+		}
+	}
+	_, err := heap.file.Exec(query, data...)
+	return err
 }
 
 func (heap *FileHeap[K]) Peek() (K, bool) {
@@ -126,33 +178,36 @@ func (heap *FileHeap[K]) Peek() (K, bool) {
 	return heap.inner.data[0], true
 }
 
-// write contents to the file
-func (heap *FileHeap[K]) SyncWrite() error {
+// reset heap to file contents. call init after.
+func (heap *FileHeap[K]) read() error {
 	if err := heap.lockOrClosed(); err != nil {
 		return err
 	}
 	defer heap.mutex.Unlock()
-	if err := heap.file.Truncate(0); err != nil {
+	//
+	iter, err := heap.file.Query(`SELECT (data) FROM data;`)
+	if err != nil {
 		return err
 	}
-	if _, err := heap.file.Seek(0, io.SeekStart); err != nil {
-		return err
-	}
-	return heap.encoder.Encode(heap.inner.data)
-}
+	defer iter.Close()
 
-// load contents from file. does nothing on eof
-func (heap *FileHeap[K]) SyncRead() error {
-	if err := heap.lockOrClosed(); err != nil {
-		return err
+	heap.inner.data = heap.inner.data[:0]
+	//loading from db
+	for {
+		var data []byte
+		if ok, err := iter.NextScan(&data); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		//
+		var next K
+		if err := json.Unmarshal(data, &next); err != nil {
+			return err
+		}
+		heap.inner.data = append(heap.inner.data, next)
 	}
-	defer heap.mutex.Unlock()
-	if _, err := heap.file.Seek(0, io.SeekStart); err != nil {
-		return err
-	}
-	if err := json.NewDecoder(heap.file).Decode(&heap.inner.data); err != nil && err != io.EOF {
-		return err
-	}
+	//
 	return nil
 }
 

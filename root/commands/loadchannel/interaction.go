@@ -168,9 +168,7 @@ func iClose(s *session, state *iState) (bool, error) {
 	if err != nil {
 		msg = fmt.Sprintf("Couldn't push to heap: %v", err)
 	} else {
-		if err = state.manager.Write(); err != nil {
-			msg = "Couldn't write data to file, this session may not save.\n"
-		} else if dropped > 0 {
+		if dropped > 0 {
 			msg += fmt.Sprintf("Dropped %d duplicates.\n", dropped) //more like a sanity check
 		}
 		msg += fmt.Sprintf("Added %d polls to the queue heap for processing", len(query.polls))

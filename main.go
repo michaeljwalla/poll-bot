@@ -31,8 +31,8 @@ var (
 const (
 	DATA_PATH  = "./data/"
 	LOG_PATH   = DATA_PATH + "logs/"
-	ALIAS_PATH = DATA_PATH + "aliases.json"
-	AUTH_PATH  = DATA_PATH + "auth.json"
+	ALIAS_PATH = DATA_PATH + "aliases.db"
+	AUTH_PATH  = DATA_PATH + "auth.db"
 	POLLS_PATH = DATA_PATH + "polls/"
 )
 

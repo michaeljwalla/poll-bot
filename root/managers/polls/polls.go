@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	QUEUE_SUBPATH   = "queue.json"
+	QUEUE_SUBPATH   = "queue.db"
 	RATINGS_SUBPATH = "ratings.csv"
 	MISC_SUBDIR     = "misc/"
 	RATINGS_SUBDIR  = "ratings/"

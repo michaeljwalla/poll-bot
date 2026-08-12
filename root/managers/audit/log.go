@@ -226,7 +226,7 @@ func (l *Log) Add(s any, groups ...string) ErrorPromise {
 func (l *Log) doPanic(params queueEntry) {
 	l.tryMigrate()
 	output := logFormat(params.Time, params.Value, append(params.Groups, LogGroup.PANIC))
-	// output += fmt.Sprintf("\n\nCaptured Stack Trace:\n%s", params.Callstack)
+	output += fmt.Sprintf("\n\nCaptured Stack Trace:\n%s", params.Callstack)
 	if hasFlag(l.flags, LogFlag.WriteFile) {
 		l.file.WriteString(output + "\n") // nolint
 	}

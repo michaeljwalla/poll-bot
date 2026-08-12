@@ -4,23 +4,40 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"iter"
-	"os"
+	"poll-bot/root/datas/sqlite"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type FileDict[K comparable, V any] struct {
-	data    map[K]V
-	path    string
-	encoder *json.Encoder
-	file    *os.File
-	mutex   sync.RWMutex
-	closed  *atomic.Bool
+	data   map[K]V
+	path   string
+	file   *sqlite.SQLiteDB
+	mutex  sync.RWMutex
+	closed *atomic.Bool
 }
 
 var ErrIsClosed = errors.New("the FileDict is closed")
+
+const FILE_TIMEOUT_MS time.Duration = 5000
+
+func newDBWithSchema(path string) (*sqlite.SQLiteDB, error) {
+	db, err := sqlite.New(path, FILE_TIMEOUT_MS)
+	if err != nil {
+		return nil, err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS data (
+		key PRIMARY KEY,
+		value BLOB NOT NULL
+	);`)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
 
 func New[K comparable, V any](path string, validate func(*K, *V) bool) (*FileDict[K, V], error) {
 	table := FileDict[K, V]{
@@ -28,12 +45,11 @@ func New[K comparable, V any](path string, validate func(*K, *V) bool) (*FileDic
 		path:   path,
 		closed: &atomic.Bool{},
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
+	file, err := newDBWithSchema(path)
 	if err != nil {
 		return nil, err
 	}
 	table.file = file
-	table.encoder = json.NewEncoder(file)
 	if err := table.SyncRead(); err != nil {
 		return nil, err
 	}
@@ -60,25 +76,58 @@ func (table *FileDict[K, V]) SyncWrite() error {
 		return err
 	}
 	defer table.mutex.Unlock()
-	// clear file
-	if err := table.file.Truncate(0); err != nil {
+
+	if _, err := table.file.Exec(`DELETE FROM data;`); err != nil {
 		return err
 	}
-	if _, err := table.file.Seek(0, io.SeekStart); err != nil {
-		return err
+	if len(table.data) == 0 {
+		return nil
 	}
-	return table.encoder.Encode(table.data)
+
+	parts := make([]string, 0, len(table.data))
+	args := make([]any, 0, len(table.data)*2)
+	for k, v := range table.data {
+		jsonData, err := json.Marshal(&v)
+		if err != nil {
+			return fmt.Errorf("While marshaling %v: %v", v, err)
+		}
+		parts = append(parts, "(?, ?)")
+		args = append(args, k, jsonData)
+	}
+	query := "REPLACE INTO data (key, value) VALUES " + strings.Join(parts, ", ") + ";"
+	_, err := table.file.Exec(query, args...)
+	return err
 }
 
-// load contents from file. does nothing on eof
+// load contents from file
 func (table *FileDict[K, V]) SyncRead() error {
 	if err := table.lockOrClosed(); err != nil {
 		return err
 	}
 	defer table.mutex.Unlock()
-	//
-	if err := json.NewDecoder(table.file).Decode(&table.data); err != nil && err != io.EOF {
+
+	iter, err := table.file.Query(`SELECT key, value FROM data;`)
+	if err != nil {
 		return err
+	}
+	defer iter.Close()
+
+	table.data = make(map[K]V)
+	for {
+		var key K
+		var raw []byte
+		ok, err := iter.NextScan(&key, &raw)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+		var value V
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return err
+		}
+		table.data[key] = value
 	}
 	return nil
 }
@@ -93,6 +142,7 @@ func (table *FileDict[K, V]) lockOrClosed() error {
 	}
 	table.mutex.Lock()
 	if table.IsClosed() {
+		table.mutex.Unlock()
 		return ErrIsClosed
 	}
 	return nil
@@ -104,10 +154,8 @@ func (table *FileDict[K, V]) Close() error {
 		return err
 	}
 	defer table.mutex.Unlock()
-	if err := table.file.Close(); err != nil {
-		return err
-	}
-	return nil
+	table.closed.Store(true)
+	return table.file.Close()
 }
 func (table *FileDict[K, V]) Get(key K) (value V, ok bool) {
 	table.mutex.RLock()

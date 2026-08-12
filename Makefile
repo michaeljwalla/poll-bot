@@ -7,7 +7,7 @@ init:
 		echo ".env file not found"; \
 		exit 1; \
 	fi
-	mkdir -p ./data/logs/ ./data/polls/misc/ 
+	mkdir -p ./data/logs/ ./data/polls/
 
 
 build: init

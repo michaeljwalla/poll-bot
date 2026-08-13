@@ -18,9 +18,9 @@ var metadata = types.CommandMetadata{
 
 // map is already reference-like but just for continuity
 func Register(bcp *types.BotCommandPackage) {
-	(*bcp.Handles)["ping"] = CommandInfo{
+	(*bcp.Handles)["write"] = CommandInfo{
 		DGInfo: &discordgo.ApplicationCommand{
-			Name:        "ping",
+			Name:        "write",
 			Description: "Responds with a pong message",
 		},
 		Metadata: metadata,

@@ -4,6 +4,8 @@ import (
 	fh "poll-bot/root/datas/fileheap"
 	"poll-bot/root/datas/set"
 	"poll-bot/root/datas/sqlite"
+	"poll-bot/root/managers/audit"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,6 +20,10 @@ import (
 const (
 	QUEUE_SUBPATH     = "queue.db"
 	FINALIZED_SUBPATH = "finalized.db"
+
+	WRITE_MAX_BATCH         = 5
+	NUM_WORKERS             = 5
+	WORKER_TIMEOUT_DURATION = time.Duration(30) * time.Second
 )
 
 type snowflake = string
@@ -29,8 +35,8 @@ type message struct {
 type Poll struct {
 	Expiry      *time.Time
 	Message     message
-	Guild       snowflake //its an extra api request from Message
-	realMessage *discordgo.Message
+	Guild       snowflake          //its an extra api request from Message
+	realMessage *discordgo.Message `json:"-"`
 }
 
 func ToMessage(msg *discordgo.Message) message {
@@ -72,10 +78,12 @@ func From(msg *discordgo.Message, guildID snowflake) *Poll {
 }
 
 type PollManager struct {
-	queue     *fh.FileHeap[Poll]
-	finalized *sqlite.SQLiteDB
-	set       set.Set[snowflake] //for quick dupe lookup
-	session   atomic.Pointer[discordgo.Session]
+	queue      *fh.FileHeap[Poll]
+	finalized  *sqlite.SQLiteDB
+	set        set.Set[snowflake] //for quick dupe lookup
+	session    atomic.Pointer[discordgo.Session]
+	workers    map[string]*resultsWorker
+	queueSubCh chan nothing //release flushes values
 }
 
 // no-op after first run
@@ -92,6 +100,28 @@ func less(l *Poll, r *Poll) bool {
 func validate(poll *Poll) bool {
 	return poll.Expiry != nil && poll.Guild != ""
 }
+
+func (man *PollManager) releaseSubscribers() {
+	for {
+		select {
+		case <-man.queueSubCh:
+		default:
+			return
+		}
+	}
+}
+func (man *PollManager) StartWorker(id string, l *audit.Log) (exists bool) {
+	if len(man.workers) >= NUM_WORKERS {
+		return true
+	} else if _, ok := man.workers[id]; ok {
+		return true
+	}
+	worker, _ := newResultsWorker(man, id, WRITE_MAX_BATCH, l)
+	man.workers[id] = worker
+	go worker.Start()
+	return false
+}
+
 func New(path string) (*PollManager, error) {
 	table, err := fh.New(path+QUEUE_SUBPATH, less, validate)
 	if err != nil {
@@ -104,9 +134,31 @@ func New(path string) (*PollManager, error) {
 	if _, err := final.Exec(resultsInitQuery); err != nil {
 		return nil, err
 	}
-	return &PollManager{
-		queue:     table,
-		finalized: final,
-		set:       set.New[snowflake](),
-	}, nil
+	// worker goroutines
+	man := PollManager{
+		queue:      table,
+		finalized:  final,
+		set:        set.New[snowflake](),
+		queueSubCh: make(chan nothing),
+		workers:    make(map[string]*resultsWorker),
+		// worker:
+	}
+
+	// worker, _ := newResultsWorker(&man, WRITE_MAX_BATCH)
+	// man.worker = worker
+
+	//
+	return &man, nil
+}
+
+func (man *PollManager) Close() error {
+	wg := sync.WaitGroup{}
+	for _, worker := range man.workers {
+		wg.Go(func() { worker.Stop(WORKER_TIMEOUT_DURATION) })
+	}
+	wg.Wait()
+	return man.queue.Close()
+}
+func (man *PollManager) Len() int {
+	return man.queue.Len()
 }

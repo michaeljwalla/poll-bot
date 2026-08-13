@@ -28,25 +28,28 @@ func (man *PollManager) Push(values ...Poll) (dupes int, err error) {
 	if dropped == len(values) {
 		return dropped, nil
 	}
-	return dropped, man.queue.Merge(pruned...)
-}
-func (man *PollManager) Pop() (poll Poll, err error) {
-	poll, err = man.queue.Pop()
-	if err != nil {
-		return
+
+	pre, hadPre := man.queue.Peek()
+	if err := man.queue.Merge(pruned...); err != nil {
+		return -1, err
 	}
-	//rid entry
-	man.set.Remove(poll.Message.ID)
-	return
+	// release subs if top changes
+	post, _ := man.queue.Peek()
+	if !hadPre || pre != post {
+		man.releaseSubscribers()
+	}
+
+	return dropped, nil
 }
 
 // just { Message: } is enough
 func (man *PollManager) Has(poll Poll) bool {
 	return man.set.Has(poll.Message.ID)
 }
-func (man *PollManager) Peek() (Poll, bool) {
-	return man.queue.Peek()
-}
+
+//	func (man *PollManager) Peek() (Poll, bool) {
+//		return man.queue.Peek()
+//	}
 func (man *PollManager) GetTopOrdered() ([]Poll, bool) {
 	iTop := 0
 	top, ok := man.queue.At(iTop)

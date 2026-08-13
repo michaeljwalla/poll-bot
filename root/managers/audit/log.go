@@ -1,7 +1,5 @@
 package audit
 
-//TODO logflags
-
 import (
 	"errors"
 	"fmt"

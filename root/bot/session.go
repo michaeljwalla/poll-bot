@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"poll-bot/root/managers/audit"
 	"poll-bot/root/managers/authorize"
+	"poll-bot/root/managers/polls"
 	"poll-bot/root/types"
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -49,6 +51,7 @@ func ack(s *discordgo.Session, i *discordgo.InteractionCreate, logger *audit.Log
 // 2. Initialize a new Discord
 // TODO aliases and auth are now in Commands. fix the type errors
 func Start(instr StartInstructions) (session *Session, err error) {
+
 	token, handles, logger, aliases, auth, components :=
 		instr.Token, instr.Commands.Handles, instr.Logger, instr.Commands.Aliases, instr.Commands.Auth, instr.Commands.Components
 	dgSession, err := discordgo.New("Bot " + token)
@@ -58,6 +61,9 @@ func Start(instr StartInstructions) (session *Session, err error) {
 
 	//setup bcp/managers
 	instr.Commands.Polls.SetSession(dgSession)
+	for i := 0; i < polls.NUM_WORKERS; i++ {
+		instr.Commands.Polls.StartWorker(strconv.Itoa(i+1), instr.Logger)
+	}
 
 	logger.Add("Begin bot init", audit.LogGroup.BOT)
 	// set perms "intents" & register gateway handler boilerplate
@@ -150,7 +156,7 @@ func Start(instr StartInstructions) (session *Session, err error) {
 		DGSession: dgSession,
 		Registers: registeredCommands,
 		Logger:    logger,
-		Package:   types.BotCommandPackage{Handles: handles},
+		Package:   instr.Commands,
 	}
 	logger.Add("Init success; bot online", audit.LogGroup.BOT)
 	return
@@ -158,6 +164,11 @@ func Start(instr StartInstructions) (session *Session, err error) {
 
 func EndSession(session *Session) {
 	session.Logger.Add("Ending session...", audit.LogGroup.BOT)
+	session.Package.Polls.Close() //nolint
+
+	defer session.Package.Aliases.Close() //nolint
+	defer session.Package.Auth.Close()    //nolint
+
 	defer func() {
 		if err := session.DGSession.Close(); err != nil {
 			session.Logger.Warn(fmt.Sprintf("Error while closing DGSession: %v", err))

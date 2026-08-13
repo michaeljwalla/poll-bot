@@ -119,7 +119,9 @@ func (wr *resultsWorker) tryAddToBatch() (ok bool, full bool, poll *Poll) {
 }
 
 func (wr *resultsWorker) waitForPoll(p *Poll) {
-
+	if wr.checkForStop() {
+		return
+	}
 	// if no poll passed, basic weight
 	if p == nil {
 		wr.sendMessage(WORKER_PAUSED, "Empty queue.")

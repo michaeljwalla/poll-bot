@@ -48,7 +48,6 @@ func fromMessage(msg *discordgo.Message, data poll) (formatted *pollFormatted, e
 	if poll == nil {
 		return nil, ErrNoPoll{}
 	}
-
 	formatted = &pollFormatted{
 		title:       poll.Question.Text,
 		id_data:     data,
@@ -119,6 +118,7 @@ func cmd_view_queue(s session, i intxn, bcp bcpackage) error {
 	} else {
 		var pollsPresent string
 		for i, msg := range tops {
+
 			formatted, err := fromMessage(msg, poll[i])
 			if err != nil {
 				return fmt.Errorf("no Poll on %v", msg)

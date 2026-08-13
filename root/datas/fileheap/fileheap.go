@@ -119,6 +119,19 @@ func (heap *FileHeap[K]) Push(value K) error {
 	return err
 }
 
+// given the value from a Peek(), attempt to take (Pop) it.
+// only returns true when you win + no err
+func (heap *FileHeap[K]) TryTake(value *K) (bool, error) {
+	x, ok := heap.Peek()
+	if !ok || x != value {
+		return false, nil
+	}
+	_, err := heap.Pop()
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
 func (heap *FileHeap[K]) Pop() (K, error) {
 	var zero K
 	if err := heap.lockOrClosed(); err != nil {
@@ -126,7 +139,7 @@ func (heap *FileHeap[K]) Pop() (K, error) {
 	}
 	defer heap.mutex.Unlock()
 	if heap.inner.Len() == 0 {
-		return zero, nil
+		return zero, errors.New("empty")
 	}
 	//
 	value := heaps.Pop(&heap.inner).(K)
@@ -168,14 +181,13 @@ func (heap *FileHeap[K]) Merge(value ...K) error {
 	return err
 }
 
-func (heap *FileHeap[K]) Peek() (K, bool) {
+func (heap *FileHeap[K]) Peek() (*K, bool) {
 	heap.mutex.RLock()
 	defer heap.mutex.RUnlock()
-	var zero K
 	if len(heap.inner.data) == 0 {
-		return zero, false
+		return nil, false
 	}
-	return heap.inner.data[0], true
+	return &heap.inner.data[0], true
 }
 
 // reset heap to file contents. call init after.

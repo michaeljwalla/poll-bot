@@ -17,6 +17,7 @@ var LogGroup = struct {
 	AUDIT    string
 	BOT      string
 	INTERACT string
+	WORKER   string
 }{
 	PANIC:    "PANIC",
 	ERR:      "ERR",
@@ -26,6 +27,7 @@ var LogGroup = struct {
 	AUDIT:    "AUDIT",
 	BOT:      "BOT",
 	INTERACT: "INTERACT",
+	WORKER:   "WORKER",
 }
 var logGroupPriorityMap = map[string]int{
 	"UNKNOWN":  math.MaxInt,
@@ -37,6 +39,7 @@ var logGroupPriorityMap = map[string]int{
 	"AUDIT":    5,
 	"BOT":      6,
 	"INTERACT": 7,
+	"WORKER":   8,
 }
 
 func FormatGroupings(groups ...string) string {

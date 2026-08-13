@@ -37,7 +37,7 @@ type Session struct {
 	Registers []*discordgo.ApplicationCommand
 	//
 	Logger  *audit.Log
-	Package BotCommandPackage
+	Package *BotCommandPackage
 }
 
 type StartInstructions struct {

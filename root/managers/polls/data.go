@@ -14,11 +14,16 @@ func (man *PollManager) Push(values ...Poll) (dupes int, err error) {
 	if len(values) == 0 {
 		return 0, nil
 	}
-	// rid dupes
+	// rid dupes (in-flight/queued via set, already-finalized via DB)
 	pruned := make([]Poll, 0, len(values))
 	var dropped int
 	for _, poll := range values {
 		if !man.set.TryInsert(poll.Message.ID) {
+			dropped++
+			continue
+		}
+		if man.hasFinalized(poll.Message.ID) {
+			man.set.Remove(poll.Message.ID) //undo insert
 			dropped++
 			continue
 		}
@@ -28,25 +33,47 @@ func (man *PollManager) Push(values ...Poll) (dupes int, err error) {
 	if dropped == len(values) {
 		return dropped, nil
 	}
-	return dropped, man.queue.Merge(pruned...)
-}
-func (man *PollManager) Pop() (poll Poll, err error) {
-	poll, err = man.queue.Pop()
-	if err != nil {
-		return
+
+	pre, hadPre := man.queue.Peek()
+	if err := man.queue.Merge(pruned...); err != nil {
+		return -1, err
 	}
-	//rid entry
-	man.set.Remove(poll.Message.ID)
-	return
+	// release subs if top changes
+	post, _ := man.queue.Peek()
+	if !hadPre || pre != post {
+		man.releaseSubscribers()
+	}
+
+	return dropped, nil
+}
+
+func (man *PollManager) Path() string {
+	return man.path
 }
 
 // just { Message: } is enough
 func (man *PollManager) Has(poll Poll) bool {
-	return man.set.Has(poll.Message.ID)
+	if man.set.Has(poll.Message.ID) {
+		return true
+	}
+	return man.hasFinalized(poll.Message.ID)
 }
-func (man *PollManager) Peek() (Poll, bool) {
-	return man.queue.Peek()
+
+// checks the results DB for a prior finalization of this id
+func (man *PollManager) hasFinalized(id snowflake) bool {
+	iter, err := man.finalized.Query(`SELECT 1 FROM results WHERE id = ? LIMIT 1;`, id)
+	if err != nil {
+		return false
+	}
+	defer iter.Close() //nolint
+	var one int
+	found, _ := iter.NextScan(&one)
+	return found
 }
+
+//	func (man *PollManager) Peek() (Poll, bool) {
+//		return man.queue.Peek()
+//	}
 func (man *PollManager) GetTopOrdered() ([]Poll, bool) {
 	iTop := 0
 	top, ok := man.queue.At(iTop)

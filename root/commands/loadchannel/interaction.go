@@ -71,7 +71,7 @@ func (state *iState) insertPolls(msgs []*discordgo.Message) {
 		if msg.Poll == nil {
 			continue
 		} else if state.manager.Has(polls.Poll{
-			Message: msg,
+			Message: polls.ToMessage(msg),
 		}) {
 			query.ignored++
 			continue
@@ -139,6 +139,15 @@ func iLoadStop(s *session, state *iState) (bool, error) {
 	if stopped.Load() {
 		return true, canceledResponse(s, i)
 	}
+	message := "Beginning upload process..."
+	emptyComponents := make([]discordgo.MessageComponent, 0)
+	_, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+		Content:    &message,
+		Components: &emptyComponents,
+	})
+	if err != nil {
+		return true, err
+	}
 	return true, nil
 }
 func iClose(s *session, state *iState) (bool, error) {
@@ -154,13 +163,10 @@ func iClose(s *session, state *iState) (bool, error) {
 	}
 
 	//notify & clear options
+	//use polls.From to cache message too
 	pollsBuffer := make([]polls.Poll, len(query.polls))
 	for j, msg := range query.polls {
-		pollsBuffer[j] = polls.Poll{
-			Expiry:  msg.Poll.Expiry,
-			Message: msg,
-			Guild:   i.GuildID,
-		}
+		pollsBuffer[j] = *polls.From(msg, i.GuildID)
 	}
 
 	var msg string

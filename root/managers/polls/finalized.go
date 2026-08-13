@@ -2,8 +2,10 @@ package polls
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // section related to finalized insertion
@@ -148,6 +150,25 @@ func (man *PollManager) Insert(mode fetchMode, done chan int, cher chan<- error,
 			}
 		}
 		pd := poll.realMessage.Poll
+		//Discord finalizes results slightly after expiry; if not yet
+		//finalized, requeue with a small delay and skip this record.
+		if pd.Results == nil || !pd.Results.Finalized {
+			later := time.Now().Add(30 * time.Second)
+			poll.Expiry = &later
+			poll.realMessage = nil //force refetch on next attempt
+			man.Push(poll)         //nolint
+			err := errors.New("poll not finalized by Discord yet")
+			if !channeled {
+				return err
+			}
+			if doBreak, doReturn := handle_insertion_err(err, done, cher); doReturn {
+				return err
+			} else if doBreak {
+				break
+			} else {
+				continue
+			}
+		}
 		//
 		options := make([]string, 0, len(pd.Answers))
 		answers := make([]RecordAnswer, 0, len(pd.Answers))

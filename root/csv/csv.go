@@ -6,6 +6,7 @@ import (
 	"poll-bot/root/info/unix"
 	"poll-bot/root/managers/aliases"
 	"poll-bot/root/managers/polls"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -14,12 +15,13 @@ import (
 type snowflake = string
 
 var answerMap = map[string]string{
-	"⭐⭐⭐⭐⭐": "5",
-	"⭐⭐⭐⭐":  "4",
-	"⭐⭐⭐":   "3",
-	"⭐⭐":    "2",
-	"⭐":     "1",
-	"N/A":   "N/A",
+	"⭐⭐⭐⭐⭐":   "5",
+	"⭐⭐⭐⭐":    "4",
+	"⭐⭐⭐":     "3",
+	"⭐⭐":      "2",
+	"⭐":       "1",
+	"N/A":     "N/A",
+	"NO DATA": "N/A",
 }
 
 type pollPair struct {
@@ -54,12 +56,19 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 			time: time.Unix(), title: rec.Title, votes: &pollVotes,
 		})
 
+		match := regexp.MustCompile(`^(⭐+|N/A)(?: \(.*\))?$`)
 		for _, choice := range rec.Answers {
+			segments := match.FindStringSubmatch(choice.Title)
+			if len(segments) <= 1 { //def not one
+				pollVotes = 0
+				break
+			}
+			title := strings.ToUpper(segments[1])
 			for _, id := range choice.Voters {
-				// ignore bad titles
-				choice, ok := answerMap[choice.Title]
+				// ignore bad titles & crop comment
+				choice, ok := answerMap[title]
 				if !ok {
-					break
+					continue
 				}
 
 				// add user if unique
@@ -80,6 +89,10 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 				}
 			}
 		}
+		//likely not a rating
+		if pollVotes == 0 {
+			delete(mappedRecData, rec.Title)
+		}
 	}
 
 	// lexicographically sort for column consistency
@@ -97,10 +110,13 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 	out.WriteString("<END>")
 	//
 	for _, pair := range pollOrder {
+		thisPoll, ok := mappedRecData[pair.title]
+		if !ok { //zero-vote poll, dropped upstream
+			continue
+		}
 		time, title, votes := time.Unix(pair.time, 0).Format("01/02/2006"), pair.title, *pair.votes
 		fmt.Fprintf(&out, "\n%s, %s, %d, ", time, title, votes)
 
-		thisPoll := mappedRecData[title]
 		for _, id := range voterOrder {
 			msg, ok := thisPoll[id]
 			if !ok {

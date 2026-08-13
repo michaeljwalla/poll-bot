@@ -29,8 +29,6 @@ func (wr *resultsWorker) sendMessage(status string, msg any) {
 	wr.logger.Add(fmt.Sprintf("%s %s: %v", wr.id, status, msg), audit.LogGroup.WORKER)
 }
 
-type resultsWorkerStatus = string
-
 const (
 	WORKER_UNSTARTED = "Unstarted"
 	WORKER_BUSY      = "Busy"
@@ -125,7 +123,11 @@ func (wr *resultsWorker) waitForPoll(p *Poll) {
 	// if no poll passed, basic weight
 	if p == nil {
 		wr.sendMessage(WORKER_PAUSED, "Empty queue.")
-		*wr.sub.ch <- 0
+		select {
+		case *wr.sub.ch <- 0:
+		case <-wr.halt:
+			wr.stopped.Store(true)
+		}
 		return
 	}
 
@@ -137,6 +139,8 @@ func (wr *resultsWorker) waitForPoll(p *Poll) {
 	select {
 	case *wr.sub.ch <- 0:
 	case <-ctx.Done():
+	case <-wr.halt:
+		wr.stopped.Store(true)
 	}
 }
 func (wr *resultsWorker) handleInsertStatus(ch chan int, cher <-chan error) (ok bool, idx int) {
@@ -186,7 +190,7 @@ func (wr *resultsWorker) Start() {
 
 		// else buffer is ready
 		ch, cher := make(chan int), make(chan error)
-		go man.Insert(CACHEDFETCH, ch, cher, wr.batch...)
+		go man.Insert(CACHEDFETCH, ch, cher, wr.batch...) //nolint
 
 		batchSize := len(wr.batch)
 		wr.sendMessage(WORKER_BUSY, fmt.Sprintf("I got %d polls.", batchSize))
@@ -202,7 +206,7 @@ func (wr *resultsWorker) Start() {
 					toRequeue = wr.batch[finalIndex:] //unwritten tail only
 					wr.sendMessage(WORKER_BUSY, fmt.Sprintf("I wrote %d/%d polls.", finalIndex, batchSize))
 				}
-				man.queue.Merge(toRequeue...)
+				man.queue.Merge(toRequeue...) //nolint
 				clear(wr.batch)
 				wr.batch = wr.batch[:0] //reset len, keep original cap
 				finalIndex = 0
@@ -214,7 +218,7 @@ func (wr *resultsWorker) Start() {
 	}
 	//do cleanup
 	wr.sendMessage(WORKER_STOPPING, "Cleaning up")
-	man.queue.Merge(wr.batch[finalIndex:]...)
+	man.queue.Merge(wr.batch[finalIndex:]...) //nolint
 	//signal safe to mutate
 	wr.halt <- 0
 	wr.sendMessage(WORKER_STOPPED, "Done")

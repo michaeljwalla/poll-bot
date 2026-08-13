@@ -30,7 +30,9 @@ type RecordAnswer struct {
 }
 type FinalRecord struct {
 	Answers  []*RecordAnswer
+	Options  []string
 	Metadata Poll
+	Title    string
 }
 
 const (
@@ -59,6 +61,62 @@ func handle_insertion_err(err error, ch chan int, cher chan<- error) (doBreak bo
 	default: //ERR IGNORE
 		return false, false
 	}
+}
+
+// Returns finalized records from the results DB. With no ids, returns
+// every row; otherwise filters by id.
+func (man *PollManager) GetFinalized(ids ...snowflake) ([]*FinalRecord, error) {
+	query := `SELECT id, channel_id, title, options, answers FROM results`
+	args := make([]any, 0, len(ids))
+	if len(ids) > 0 {
+		placeholders := strings.Repeat("?,", len(ids))
+		query += ` WHERE id IN (` + placeholders[:len(placeholders)-1] + `)`
+		for _, id := range ids {
+			args = append(args, id)
+		}
+	}
+	query += `;`
+
+	iter, err := man.finalized.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer iter.Close() //nolint
+
+	var out []*FinalRecord
+	for {
+		var (
+			id, channelID            snowflake
+			title                    string
+			optionsBlob, answersBlob []byte
+		)
+		ok, err := iter.NextScan(&id, &channelID, &title, &optionsBlob, &answersBlob)
+		if err != nil {
+			return out, err
+		}
+		if !ok {
+			break
+		}
+		var options []string
+		if err := json.Unmarshal(optionsBlob, &options); err != nil {
+			return out, fmt.Errorf("decoding options for %s: %v", id, err)
+		}
+		var answers []RecordAnswer
+		if err := json.Unmarshal(answersBlob, &answers); err != nil {
+			return out, fmt.Errorf("decoding answers for %s: %v", id, err)
+		}
+		ptrs := make([]*RecordAnswer, len(answers))
+		for i := range answers {
+			ptrs[i] = &answers[i]
+		}
+		out = append(out, &FinalRecord{
+			Answers:  ptrs,
+			Options:  options,
+			Metadata: Poll{Message: message{ID: id, ChannelID: channelID}},
+			Title:    title,
+		})
+	}
+	return out, nil
 }
 
 // error channel non-blocking

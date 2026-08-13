@@ -22,10 +22,23 @@ func IdToEpochMillis(s string) uint64 {
 
 	return asNum>>22 + EPOCH_MS
 }
+
 func TimeToSnowflake(t time.Time) string {
 	unixMs := t.UnixNano() / int64(time.Millisecond)
 
 	discordMs := unixMs - int64(EPOCH_MS)
 
 	return fmt.Sprintf("%d", uint64(discordMs)<<22)
+}
+
+func SnowflakeToTime(snowflake string) (time.Time, error) {
+	id, err := strconv.ParseUint(snowflake, 10, 64)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	discordMs := int64(id >> 22)
+	unixMs := discordMs + int64(EPOCH_MS)
+
+	return time.UnixMilli(unixMs), nil
 }

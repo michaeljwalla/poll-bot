@@ -20,6 +20,7 @@ import (
 const (
 	QUEUE_SUBPATH     = "queue.db"
 	FINALIZED_SUBPATH = "finalized.db"
+	EXPORT_SUBPATH    = "exported.csv"
 
 	WRITE_MAX_BATCH         = 5
 	NUM_WORKERS             = 5
@@ -78,6 +79,7 @@ func From(msg *discordgo.Message, guildID snowflake) *Poll {
 }
 
 type PollManager struct {
+	path       string
 	queue      *fh.FileHeap[Poll]
 	finalized  *sqlite.SQLiteDB
 	set        set.Set[snowflake] //for quick dupe lookup
@@ -136,6 +138,7 @@ func New(path string) (*PollManager, error) {
 	}
 	// worker goroutines
 	man := PollManager{
+		path:       path,
 		queue:      table,
 		finalized:  final,
 		set:        set.New[snowflake](),
@@ -154,8 +157,9 @@ func New(path string) (*PollManager, error) {
 func (man *PollManager) Close() error {
 	wg := sync.WaitGroup{}
 	for _, worker := range man.workers {
-		wg.Go(func() { worker.Stop(WORKER_TIMEOUT_DURATION) })
+		wg.Go(func() { worker.Stop(WORKER_TIMEOUT_DURATION) }) //nolint
 	}
+	man.releaseSubscribers()
 	wg.Wait()
 	return man.queue.Close()
 }

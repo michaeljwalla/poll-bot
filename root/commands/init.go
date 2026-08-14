@@ -2,6 +2,7 @@ package commands
 
 import (
 	"poll-bot/root/commands/alias"
+	"poll-bot/root/commands/credentials"
 	"poll-bot/root/commands/export"
 	"poll-bot/root/commands/loadchannel"
 	"poll-bot/root/commands/modrank"
@@ -14,6 +15,7 @@ import (
 	"poll-bot/root/managers/authorize"
 	"poll-bot/root/managers/components"
 	"poll-bot/root/managers/polls"
+	"poll-bot/root/managers/web"
 	"poll-bot/root/types"
 )
 
@@ -25,23 +27,26 @@ type RegisterReqs struct {
 	Auth       *authorize.AuthManager
 	Polls      *polls.PollManager
 	Components *components.ComponentCallbackManager
+	WebManager *web.WebManager
 }
 
-var registers []func(*types.BotCommandPackage)
-
-func init() {
-	registers = []func(*types.BotCommandPackage){
-		alias.Register,
-		modrank.Register,
-		ping.Register,
-		rank.Register,
-		rate.Register,
-		status.Register,
-		loadchannel.Register,
-		version.Register,
-		export.Register,
-	}
+var registers = []func(*types.BotCommandPackage){
+	alias.Register,
+	modrank.Register,
+	ping.Register,
+	rank.Register,
+	rate.Register,
+	status.Register,
+	loadchannel.Register,
+	version.Register,
+	export.Register,
 }
+
+// commands who interact with the bot's server api
+var web_registers = []func(*types.BotCommandPackage, *web.WebManager){
+	credentials.Register,
+}
+
 func Register(reqs RegisterReqs) *types.BotCommandPackage {
 	handles := make(map[string]CommandInfo)
 	bcp := types.BotCommandPackage{
@@ -54,6 +59,12 @@ func Register(reqs RegisterReqs) *types.BotCommandPackage {
 
 	for _, reg := range registers {
 		reg(&bcp)
+	}
+	if len(web_registers) > 0 && reqs.WebManager == nil {
+		panic("web registers present with no manager")
+	}
+	for _, reg := range web_registers {
+		reg(&bcp, reqs.WebManager)
 	}
 	return &bcp
 }

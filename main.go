@@ -14,6 +14,8 @@ import (
 	"poll-bot/root/managers/authorize"
 	"poll-bot/root/managers/components"
 	"poll-bot/root/managers/polls"
+	"poll-bot/root/managers/web"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -29,14 +31,22 @@ var (
 )
 
 const (
-	DATA_PATH  = "./data/"
-	LOG_PATH   = DATA_PATH + "logs/"
-	ALIAS_PATH = DATA_PATH + "aliases.db"
-	AUTH_PATH  = DATA_PATH + "auth.db"
-	POLLS_PATH = DATA_PATH + "polls/"
+	DATA_PATH         = "./data/"
+	LOG_PATH          = DATA_PATH + "logs/"
+	ALIAS_PATH        = DATA_PATH + "aliases.db"
+	DISCORD_AUTH_PATH = DATA_PATH + "discord_auth.db"
+	POLLS_PATH        = DATA_PATH + "polls/"
+	//
+	WEB_ROOT_PATH = "/pb"
+	WEB_AUTH_PATH = DATA_PATH + "web_auth.db"
 )
 
-func setEnvironmentVars() (token string, mode string) {
+type serverInfo struct {
+	port         int
+	signingToken string
+}
+
+func setEnvironmentVars() (token string, mode string, server *serverInfo) {
 	mode = strings.ToUpper(os.Getenv("MODE"))
 	if mode == "" {
 		log.Fatal(errors.New("you should provide a MODE"))
@@ -45,6 +55,18 @@ func setEnvironmentVars() (token string, mode string) {
 	if token == "" {
 		log.Fatal(fmt.Errorf("no token for MODE '%s' (canceled)", mode))
 		return
+	}
+	tryPort := os.Getenv("SERVER_PORT")
+	if tryPort != "" {
+		port, err := strconv.Atoi(tryPort)
+		if err != nil {
+			log.Fatal(fmt.Errorf("invalid SERVER_PORT %s: %v", tryPort, err))
+		}
+		signingSecret := os.Getenv("JWT_SECRET")
+		if signingSecret == "" {
+			log.Fatal(fmt.Errorf("SERVER_PORT present without JWT_SECRET"))
+		}
+		server = &serverInfo{port, signingSecret}
 	}
 	return
 }
@@ -67,7 +89,7 @@ func getManAliases() *aliases.AliasManager {
 	return man
 }
 func getManAuth() *authorize.AuthManager {
-	man, err := authorize.New(AUTH_PATH)
+	man, err := authorize.New(DISCORD_AUTH_PATH)
 	if err != nil {
 		logger.Panic(fmt.Sprintf("Couldn't init auth manager: %v", err), audit.LogGroup.INIT)
 		return nil
@@ -80,6 +102,19 @@ func getManPolls() *polls.PollManager {
 		logger.Panic(fmt.Sprintf("Couldn't init poll manager: %v", err), audit.LogGroup.INIT)
 		return nil
 	}
+	return man
+}
+func getManWeb(info *serverInfo) *web.WebManager {
+	if info == nil {
+		return nil
+	}
+	//
+	man, err := web.New(info.port, WEB_ROOT_PATH, WEB_AUTH_PATH, []byte(info.signingToken))
+	if err != nil {
+		logger.Panic(fmt.Sprintf("Couldn't init poll manager: %v", err), audit.LogGroup.INIT)
+		return nil
+	}
+	logger.Add(fmt.Sprintf("Starting webserver on port %d:%s", info.port, WEB_ROOT_PATH))
 	return man
 }
 func init() {
@@ -122,7 +157,7 @@ func main() {
 		return
 	}
 
-	token, mode := setEnvironmentVars()
+	token, mode, server := setEnvironmentVars()
 	setupLogger(mode)
 	defer logger.Close() // nolint
 
@@ -133,6 +168,7 @@ func main() {
 		Auth:       getManAuth(),
 		Polls:      getManPolls(),
 		Components: components.New(),
+		WebManager: getManWeb(server),
 	})
 
 	//

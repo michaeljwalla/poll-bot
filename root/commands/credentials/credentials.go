@@ -2,6 +2,7 @@ package credentials
 
 import (
 	"poll-bot/root/managers/authorize"
+	"poll-bot/root/managers/components"
 	"poll-bot/root/managers/web"
 	"poll-bot/root/types"
 
@@ -29,6 +30,64 @@ var subcommands = subCommandMap{
 	"drop": cmd_drop_credentials,
 }
 
+type field struct {
+	Label, CustomID, Placeholder string
+}
+type credentialSet struct {
+	id       string
+	password string
+}
+type iState struct {
+	manager *web.WebManager
+	// modal has no message. use state.message
+	interaction intxn
+
+	// nil means bad input
+	credentials *credentialSet
+
+	// nil means create message, otherwise edit
+	message *discordgo.Message
+}
+
+type snowflake = string
+
+type registerCallback = func(intxn) (bool, error)
+type stateCallback = func(session, *iState) (bool, error)
+
+// inject state via wrapper func in order to isolate interactions
+func shareState(s session, state *iState, f stateCallback) registerCallback {
+	return func(i intxn) (bool, error) {
+		state.interaction = i
+		return f(s, state)
+	}
+}
+func newInjector(s session, state *iState) func(stateCallback) registerCallback {
+	return func(f stateCallback) registerCallback {
+		return shareState(s, state, f)
+	}
+}
+
+func makeFields(fields []field) []discordgo.MessageComponent {
+	if fields == nil {
+		return nil
+	}
+	out := make([]discordgo.MessageComponent, len(fields))
+	for i, f := range fields {
+		out[i] = discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				discordgo.TextInput{
+					CustomID:    f.CustomID,
+					Label:       f.Label,
+					Style:       discordgo.TextInputShort,
+					Placeholder: f.Placeholder,
+					Required:    true,
+					MaxLength:   50,
+				},
+			},
+		}
+	}
+	return out
+}
 func getSubcommands(subcommands subCommandMap) []*choice {
 	choices := make([]*choice, len(subcommands))
 
@@ -45,6 +104,12 @@ func getSubcommands(subcommands subCommandMap) []*choice {
 
 // map is already reference-like but just for continuity
 func Register(bcp *types.BotCommandPackage, web *webman) {
+	bcp.Components.AddGroup("cred-set", &components.GroupMetadata{
+		NewInvalidatesOld:  true,
+		InvalidationCloses: false,
+		FromHandle:         "credentials",
+	})
+
 	(*bcp.Handles)["credentials"] = CommandInfo{
 		DGInfo: &discordgo.ApplicationCommand{
 			Name:        "credentials",

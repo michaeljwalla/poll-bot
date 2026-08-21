@@ -37,7 +37,7 @@ const (
 	DISCORD_AUTH_PATH = DATA_PATH + "discord_auth.db"
 	POLLS_PATH        = DATA_PATH + "polls/"
 	//
-	WEB_ROOT_PATH = "/pb"
+	WEB_ROOT_PATH = "" // you should point this port to the root externally
 	WEB_AUTH_PATH = DATA_PATH + "web_auth.db"
 )
 

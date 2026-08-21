@@ -3,13 +3,13 @@ package credentials
 import (
 	"fmt"
 	"poll-bot/root/managers/components"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
 
 func iModalSubmit(s session, state *iState) (bool, error) {
 	i := state.interaction
+	web := state.manager
 
 	msg, err := s.ChannelMessageSendComplex(i.ChannelID, &discordgo.MessageSend{
 		Content: "I'm validating this information...",
@@ -19,28 +19,28 @@ func iModalSubmit(s session, state *iState) (bool, error) {
 	}
 	state.message = msg
 
-	// VA:ODATE OIT HERE
-	return true, err
-}
-func iModalClose(s session, state *iState) (bool, error) {
-	i := state.interaction
-	msg := state.message
+	data := i.ModalSubmitData()
+	idField := data.Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
+	passField := data.Components[1].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
 
-	time.Sleep(time.Duration(3) * time.Second)
-	if msg == nil {
-		_, err := s.ChannelMessageSendComplex(i.ChannelID, &discordgo.MessageSend{
-			Content: "Something has gone terribly wrong (jk)",
-		})
-		return true, err
+	err = web.ModifyUser(idField, passField, 0)
+
+	var message string
+	if err != nil {
+		message = fmt.Sprintf("<@%s>, I couldn't create credentials: %v", i.Member.User.ID, err)
+
+	} else {
+		message = fmt.Sprintf("<@%s>, I created credentials for `%s`. You should be able to sign in now.", i.Member.User.ID, idField)
 	}
-
-	message := fmt.Sprintf("<@%s>, I created credentials for `%s`. You should be able to sign in now.", i.Member.User.ID, "John Doe")
-	_, err := s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+	_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
 		ID:      msg.ID,
 		Channel: msg.ChannelID,
 		Content: &message,
 	})
 	return true, err
+}
+func iModalClose(s session, state *iState) (bool, error) {
+	return true, nil
 }
 
 func createCredentialSetSession(bcp bcpackage, man *webman, s session, i intxn) error {

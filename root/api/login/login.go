@@ -114,8 +114,12 @@ func getUnverifiedTokenFromHeader(r *http.Header) []byte {
 	if auth == "" {
 		return nil
 	}
-	matcher := regexp.MustCompile(`Bearer ([a-zA-Z0-9\+=]+)`) //simple base64 char capture
-	return matcher.Find([]byte(auth))
+	matcher := regexp.MustCompile(`^Bearer ([a-zA-Z0-9_.\-]+$)`) //simple base64 char capture
+	match := matcher.FindStringSubmatch(auth)
+	if match == nil {
+		return nil
+	}
+	return []byte(match[1]) // 0 is whole, not capture
 }
 func requestTokenReauthentication(w http.ResponseWriter) {
 	w.Header().Add(
@@ -123,6 +127,9 @@ func requestTokenReauthentication(w http.ResponseWriter) {
 		fmt.Sprintf(`Bearer error="invalid_token", error_description="%v"`, ErrInvalidToken),
 	)
 	errWrite(w, http.StatusUnauthorized, ErrInvalidToken)
+}
+func blockTokenUnauthorized(w http.ResponseWriter) {
+	errWrite(w, http.StatusUnauthorized, ErrNoToken)
 }
 
 func ValidateLogin(w http.ResponseWriter, r *http.Request) {
@@ -174,4 +181,18 @@ func ValidateLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	// success
 	w.Write(payload)
+}
+
+func MiddlewareTokenValidator(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		existingToken := getUnverifiedTokenFromHeader(&r.Header)
+		if existingToken == nil {
+			blockTokenUnauthorized(w)
+			return
+		} else if !ValidateToken(existingToken) {
+			requestTokenReauthentication(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"poll-bot/root/api/login"
+	"poll-bot/root/api/polls"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -25,11 +26,11 @@ func initAuthorizers(dbPath string, signingKey []byte) error {
 func initRouter(port int, rootPath string) error {
 	//chi http template
 	r := chi.NewRouter()
-
+	validator := login.MiddlewareTokenValidator
 	// A good base middleware stack
 	r.Use(middleware.RequestID)
 	r.Use(middleware.ClientIPFromRemoteAddr) // pick one ClientIPFrom* based on your infra, see below
-	// r.Use(middleware.Logger)
+	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
 	r.Use(middleware.Timeout(60 * time.Second))
@@ -42,6 +43,7 @@ func initRouter(port int, rootPath string) error {
 	// API
 	r.Route(rootPath+"/api/"+API_VER, func(r chi.Router) {
 		r.Post("/login", login.ValidateLogin)
+		r.With(validator).Get("/polls", polls.GetPage)
 	})
 
 	go http.ListenAndServe(fmt.Sprintf(":%d", port), r) //always nonnil

@@ -56,6 +56,7 @@ var ErrInvalidID = errors.New("id does not fulfill requirements")
 var ErrInvalidPassword = errors.New("password does not fulfill requirements")
 var ErrInvalidLogin = errors.New("unknown credentials")
 var ErrInvalidToken = errors.New("the access token is invalid or expired")
+var ErrNoToken = errors.New("no access token provided")
 
 func Start(path string, signingKey []byte) error {
 	if IsOpen() {
@@ -161,7 +162,7 @@ SELECT expiry
 	if err := row.Scan(&expiry); err != nil {
 		return nil, err //errnorows
 	}
-	if expiry.Valid {
+	if expiry.Valid && expiry.Int64 > 0 {
 		return newServerUserData(body, expiry.Int64), nil
 	}
 	return newServerUserData(body, DEFAULT_EXPIRY), nil

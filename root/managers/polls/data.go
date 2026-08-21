@@ -40,7 +40,7 @@ func (man *PollManager) Push(values ...Poll) (dupes int, err error) {
 	}
 	// release subs if top changes
 	post, _ := man.queue.Peek()
-	if !hadPre || pre != post {
+	if !hadPre || pre.Message.ID != post.Message.ID {
 		man.releaseSubscribers()
 	}
 

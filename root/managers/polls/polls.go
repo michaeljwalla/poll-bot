@@ -22,6 +22,9 @@ const (
 	FINALIZED_SUBPATH = "finalized.db"
 	EXPORT_SUBPATH    = "exported.csv"
 
+	//how long to wait before re-checking a poll Discord has not finalized yet
+	RETRY_DELAY = time.Duration(30) * time.Second
+
 	WRITE_MAX_BATCH         = 5
 	NUM_WORKERS             = 5
 	WORKER_TIMEOUT_DURATION = time.Duration(30) * time.Second
@@ -95,8 +98,19 @@ func (man *PollManager) SetSession(s *discordgo.Session) bool {
 func (man *PollManager) HasSession() bool {
 	return man.session.Load() != nil
 }
+
+// soonest expiry first. A nil expiry means Discord did not tell us when the
+// poll closes, so it sinks rather than floats: it must not preempt polls we
+// know are due. (The old form returned true for l == r when both were nil,
+// which is not a valid ordering for container/heap either.)
 func less(l *Poll, r *Poll) bool {
-	return l.Expiry == nil || (r.Expiry != nil && l.Expiry.Before(*r.Expiry))
+	if l.Expiry == nil {
+		return false
+	}
+	if r.Expiry == nil {
+		return true
+	}
+	return l.Expiry.Before(*r.Expiry)
 }
 
 func validate(poll *Poll) bool {

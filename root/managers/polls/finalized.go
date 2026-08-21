@@ -2,7 +2,6 @@ package polls
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -151,13 +150,24 @@ func (man *PollManager) Insert(mode fetchMode, done chan int, cher chan<- error,
 		}
 		pd := poll.realMessage.Poll
 		//Discord finalizes results slightly after expiry; if not yet
-		//finalized, requeue with a small delay and skip this record.
+		//finalized, requeue and skip this record.
 		if pd.Results == nil || !pd.Results.Finalized {
-			later := time.Now().Add(30 * time.Second)
-			poll.Expiry = &later
+			//the live message is authoritative: whatever we had stored may be
+			//stale, clobbered by an earlier retry, or absent entirely.
+			if pd.Expiry != nil {
+				poll.Expiry = pd.Expiry
+			}
+			//only ever push the retry forward. Overwriting a future expiry
+			//with now+RETRY_DELAY strands the poll in a RETRY_DELAY loop for
+			//as long as it has left to run, and loses its real deadline.
+			retry := time.Now().Add(RETRY_DELAY)
+			if poll.Expiry == nil || poll.Expiry.Before(retry) {
+				poll.Expiry = &retry
+			}
 			poll.realMessage = nil //force refetch on next attempt
 			man.Push(poll)         //nolint
-			err := errors.New("poll not finalized by Discord yet")
+			err := fmt.Errorf("poll %s not finalized by Discord yet, retrying at %s",
+				poll.Message.ID, poll.Expiry.Format(time.RFC3339))
 			if !channeled {
 				return err
 			}

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"poll-bot/root/api/general"
 	"poll-bot/root/api/types"
@@ -109,23 +108,30 @@ func validateLoginBody(w http.ResponseWriter, r *http.Request, body *LoginBody) 
 	return true
 }
 
-func getUnverifiedTokenFromHeader(r *http.Header) []byte {
-	auth := r.Get("Authorization")
-	if auth == "" {
-		return nil
+func getUnverifiedTokenFromCookie(r *http.Request) ([]byte, error) {
+	auth, err := r.Cookie("Authorization")
+	if err != nil {
+		if errors.Is(err, http.ErrNoCookie) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	matcher := regexp.MustCompile(`^Bearer ([a-zA-Z0-9_.\-]+$)`) //simple base64 char capture
-	match := matcher.FindStringSubmatch(auth)
+
+	matcher := regexp.MustCompile(`^([a-zA-Z0-9_.\-]+$)`) //simple base64 char capture
+	match := matcher.FindStringSubmatch(auth.Value)
 	if match == nil {
-		return nil
+		return nil, nil
 	}
-	return []byte(match[1]) // 0 is whole, not capture
+	return []byte(match[1]), nil // 0 is whole, not capture
 }
 func requestTokenReauthentication(w http.ResponseWriter) {
-	w.Header().Add(
-		"WWW-Authenticate",
-		fmt.Sprintf(`Bearer error="invalid_token", error_description="%v"`, ErrInvalidToken),
-	)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "Authorization",
+		Value:    "",
+		HttpOnly: true,
+		Path:     "/",
+		MaxAge:   -1,
+	})
 	errWrite(w, http.StatusUnauthorized, ErrInvalidToken)
 }
 func blockTokenUnauthorized(w http.ResponseWriter) {
@@ -133,8 +139,10 @@ func blockTokenUnauthorized(w http.ResponseWriter) {
 }
 
 func ValidateLogin(w http.ResponseWriter, r *http.Request) {
-	existingToken := getUnverifiedTokenFromHeader(&r.Header)
-	if existingToken != nil && !ValidateToken(existingToken) {
+	existingToken, err := getUnverifiedTokenFromCookie(r)
+	if err != nil {
+		errWrite(w, http.StatusInternalServerError, err)
+	} else if existingToken != nil && !ValidateToken(existingToken) {
 		requestTokenReauthentication(w)
 		return
 	}
@@ -168,24 +176,23 @@ func ValidateLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//
-	payload, err := json.Marshal(&LoginResponse{
-		Token:  token.String(),
-		Expiry: int64(data.Expiry.Seconds()),
-		User: UserData{
-			ID: data.ID,
-		},
+	http.SetCookie(w, &http.Cookie{
+		Name:     "Authorization",
+		Value:    token.String(),
+		HttpOnly: true,
+		Path:     "/",
+		MaxAge:   int(data.Expiry.Seconds()),
 	})
-	if err != nil {
-		errWrite(w, http.StatusInternalServerError, err)
-		return
-	}
-	// success
-	w.Write(payload)
+	w.WriteHeader(200)
 }
 
 func MiddlewareTokenValidator(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		existingToken := getUnverifiedTokenFromHeader(&r.Header)
+		existingToken, err := getUnverifiedTokenFromCookie(r)
+		if err != nil {
+			errWrite(w, http.StatusInternalServerError, err)
+			return
+		}
 		if existingToken == nil {
 			blockTokenUnauthorized(w)
 			return

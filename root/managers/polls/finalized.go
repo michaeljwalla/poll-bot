@@ -23,7 +23,26 @@ CREATE TABLE IF NOT EXISTS results (
         id
     )
 );
+
+CREATE TABLE IF NOT EXISTS manual (
+    id      BIGINT        NOT NULL,
+    title   VARCHAR (300) NOT NULL,
+    options BLOB          NOT NULL,
+    answers BLOB          NOT NULL,
+    PRIMARY KEY (
+        id
+    )
+);
 `
+
+// results and manual hold the same rows apart from channel_id, which only
+// Discord-sourced polls carry. Nothing reads it back off a record, so manual
+// rows select a constant rather than the table carrying a dead column.
+// Manual rows are hand-entered, so they shadow a results row of the same id.
+const finalizedSources = `SELECT id, '' AS channel_id, title, options, answers FROM manual
+	UNION ALL
+	SELECT id, channel_id, title, options, answers FROM results
+	WHERE id NOT IN (SELECT id FROM manual)`
 
 type RecordAnswer struct {
 	Title  string
@@ -65,10 +84,11 @@ func handle_insertion_err(err error, ch chan int, cher chan<- error) (doBreak bo
 	}
 }
 
-// Returns finalized records from the results DB. With no ids, returns
-// every row; otherwise filters by id.
+// Returns finalized records from both the results and manual tables. With no
+// ids, returns every row; otherwise filters by id. An id held by both tables
+// resolves to the manual row.
 func (man *PollManager) GetFinalized(offset int, limit int, ids ...snowflake) ([]*FinalRecord, error) {
-	query := `SELECT id, channel_id, title, options, answers FROM results ORDER BY id`
+	query := `SELECT id, channel_id, title, options, answers FROM (` + finalizedSources + `)`
 	args := make([]any, 0, len(ids))
 	if len(ids) > 0 {
 		placeholders := strings.Repeat("?,", len(ids))
@@ -77,8 +97,12 @@ func (man *PollManager) GetFinalized(offset int, limit int, ids ...snowflake) ([
 			args = append(args, id)
 		}
 	}
+	//the filter has to land on the union before it can be ordered or paged.
+	query += ` ORDER BY id`
 	if limit > 0 {
 		query += " LIMIT " + strconv.Itoa(limit)
+	} else if offset > 0 {
+		query += " LIMIT -1" //SQLite rejects a bare OFFSET; -1 means unbounded
 	}
 	if offset > 0 {
 		query += " OFFSET " + strconv.Itoa(offset)
@@ -120,7 +144,7 @@ func (man *PollManager) GetFinalized(offset int, limit int, ids ...snowflake) ([
 		out = append(out, &FinalRecord{
 			Answers:  ptrs,
 			Options:  options,
-			Metadata: Poll{Message: message{ID: id, ChannelID: channelID}},
+			Metadata: Poll{Message: Message{ID: id, ChannelID: channelID}},
 			Title:    title,
 		})
 	}
@@ -281,5 +305,63 @@ func (man *PollManager) Insert(mode fetchMode, done chan int, cher chan<- error,
 			done <- INS_WRITE_SUCCESS
 		}
 	}
+	return err
+}
+
+// Writes records straight into the manual table. Unlike Insert there is no
+// fetch mode and no progress/error channels: nothing here talks to Discord,
+// so there is no rate limit to pace against and a failure is just an error.
+// Rows are keyed by id, so re-posting the same id overwrites it.
+func (man *PollManager) InsertManual(records ...*FinalRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+	valueBuilder := strings.Builder{}
+	valueSet := "(?, ?, ?, ?)"
+	valueBuilder.WriteString(`REPLACE INTO manual
+		(id, title, options, answers)
+		VALUES `)
+	args := make([]any, 0, len(records)*4)
+	rowCount := 0 //rows actually appended (nil records are skipped)
+
+	for _, rec := range records {
+		if rec == nil {
+			continue
+		}
+		id := rec.Metadata.Message.ID
+		if id == "" {
+			return fmt.Errorf("manual insertion: record %q has no id", rec.Title)
+		}
+		options := rec.Options
+		if options == nil {
+			options = []string{}
+		}
+		answers := rec.Answers
+		if answers == nil {
+			answers = []*RecordAnswer{}
+		}
+
+		jsonOptions, err := json.Marshal(options)
+		if err != nil {
+			return fmt.Errorf("manual insertion marshaling %v: %v", options, err)
+		}
+		jsonAnswers, err := json.Marshal(answers)
+		if err != nil {
+			return fmt.Errorf("manual insertion marshaling %v: %v", answers, err)
+		}
+
+		if rowCount > 0 {
+			valueBuilder.WriteString(", ")
+		}
+		valueBuilder.WriteString(valueSet)
+		// id, title, optionblob, answerblob
+		args = append(args, id, rec.Title, jsonOptions, jsonAnswers)
+		rowCount++
+	}
+	if rowCount == 0 {
+		return nil
+	}
+	valueBuilder.WriteString(";")
+	_, err := man.finalized.Exec(valueBuilder.String(), args...)
 	return err
 }

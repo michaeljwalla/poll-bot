@@ -8,8 +8,6 @@ import (
 	"poll-bot/root/api/general"
 	"poll-bot/root/api/types"
 	"regexp"
-
-	"github.com/cristalhq/jwt/v5"
 )
 
 var newErrResponse = general.NewErrResponse
@@ -134,14 +132,6 @@ func blockTokenUnauthorized(w http.ResponseWriter) {
 }
 
 func ValidateLogin(w http.ResponseWriter, r *http.Request) {
-	existingToken, err := getUnverifiedTokenFromCookie(r)
-	if err != nil {
-		general.ErrWrite(w, http.StatusInternalServerError, err)
-	} else if existingToken != nil && !ValidateToken(existingToken) {
-		requestTokenReauthentication(w)
-		return
-	}
-
 	var body LoginBody
 	if !validateLoginBody(w, r, &body) {
 		return
@@ -160,12 +150,7 @@ func ValidateLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//gen session token
-	var token *jwt.Token
-	if existingToken != nil {
-		token, err = jwt.ParseNoVerify(existingToken) // it already passed ValidateToken
-	} else {
-		token, err = newTokenForUser(data)
-	}
+	token, err := newTokenForUser(data)
 	if err != nil {
 		general.ErrWrite(w, http.StatusInternalServerError, err)
 		return

@@ -30,12 +30,16 @@ type pollPair struct {
 	votes *int
 }
 
-func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager) (*string, error) {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return nil, err
+func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager) (*strings.Builder, error) {
+	var file *os.File
+	var err error
+	if path != "" {
+		file, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close() //nolint
 	}
-	defer file.Close() //nolint
 	// const HEADER = "Date, Topic, Total, Users...,  <END>"
 
 	voterNames := make(map[snowflake]string)
@@ -126,7 +130,9 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 		}
 		out.WriteString("<END>")
 	}
-	final := out.String()
-	file.Write([]byte(final)) //nolint
-	return &final, nil
+	if file != nil {
+		_, err := file.WriteString(out.String())
+		return &out, err
+	}
+	return &out, nil
 }

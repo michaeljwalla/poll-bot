@@ -86,23 +86,18 @@ func isValidPass(s string) bool {
 	return passStringReqs(s, PASS_MIN_LENGTH, PASS_MAX_LENGTH, matchers.Password)
 }
 
-func errWrite(w http.ResponseWriter, status int, err error) {
-	w.WriteHeader(status)
-	w.Write(newErrResponse(status, err.Error()))
-}
-
 func validateLoginBody(w http.ResponseWriter, r *http.Request, body *LoginBody) bool {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		errWrite(w, http.StatusBadRequest, errors.New("cannot parse body"))
+		general.ErrWrite(w, http.StatusBadRequest, errors.New("cannot parse body"))
 		return false
 	}
 
 	// field checks
 	if !isValidID(body.ID) {
-		errWrite(w, http.StatusUnprocessableEntity, ErrInvalidID)
+		general.ErrWrite(w, http.StatusUnprocessableEntity, ErrInvalidID)
 		return false
 	} else if !isValidPass(body.Password) {
-		errWrite(w, http.StatusUnprocessableEntity, ErrInvalidPassword)
+		general.ErrWrite(w, http.StatusUnprocessableEntity, ErrInvalidPassword)
 		return false
 	}
 	return true
@@ -132,16 +127,16 @@ func requestTokenReauthentication(w http.ResponseWriter) {
 		Path:     "/",
 		MaxAge:   -1,
 	})
-	errWrite(w, http.StatusUnauthorized, ErrInvalidToken)
+	general.ErrWrite(w, http.StatusUnauthorized, ErrInvalidToken)
 }
 func blockTokenUnauthorized(w http.ResponseWriter) {
-	errWrite(w, http.StatusUnauthorized, ErrNoToken)
+	general.ErrWrite(w, http.StatusUnauthorized, ErrNoToken)
 }
 
 func ValidateLogin(w http.ResponseWriter, r *http.Request) {
 	existingToken, err := getUnverifiedTokenFromCookie(r)
 	if err != nil {
-		errWrite(w, http.StatusInternalServerError, err)
+		general.ErrWrite(w, http.StatusInternalServerError, err)
 	} else if existingToken != nil && !ValidateToken(existingToken) {
 		requestTokenReauthentication(w)
 		return
@@ -156,11 +151,11 @@ func ValidateLogin(w http.ResponseWriter, r *http.Request) {
 	data, err := getUserFromLogin(&body)
 	switch err {
 	case sql.ErrNoRows:
-		errWrite(w, http.StatusUnauthorized, ErrInvalidLogin)
+		general.ErrWrite(w, http.StatusUnauthorized, ErrInvalidLogin)
 		return
 	case nil:
 	default:
-		errWrite(w, http.StatusInternalServerError, err)
+		general.ErrWrite(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -172,7 +167,7 @@ func ValidateLogin(w http.ResponseWriter, r *http.Request) {
 		token, err = newTokenForUser(data)
 	}
 	if err != nil {
-		errWrite(w, http.StatusInternalServerError, err)
+		general.ErrWrite(w, http.StatusInternalServerError, err)
 		return
 	}
 	//
@@ -190,7 +185,7 @@ func MiddlewareTokenValidator(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		existingToken, err := getUnverifiedTokenFromCookie(r)
 		if err != nil {
-			errWrite(w, http.StatusInternalServerError, err)
+			general.ErrWrite(w, http.StatusInternalServerError, err)
 			return
 		}
 		if existingToken == nil {

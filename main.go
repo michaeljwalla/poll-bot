@@ -170,7 +170,7 @@ func main() {
 		Components: components.New(),
 		WebManager: getManWeb(server),
 	})
-
+	web.GrantDiscordSessionInformation(commands)
 	//
 
 	session, err := bot.Start(bot.StartInstructions{

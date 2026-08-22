@@ -3,6 +3,7 @@ package polls
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -66,8 +67,8 @@ func handle_insertion_err(err error, ch chan int, cher chan<- error) (doBreak bo
 
 // Returns finalized records from the results DB. With no ids, returns
 // every row; otherwise filters by id.
-func (man *PollManager) GetFinalized(ids ...snowflake) ([]*FinalRecord, error) {
-	query := `SELECT id, channel_id, title, options, answers FROM results`
+func (man *PollManager) GetFinalized(offset int, limit int, ids ...snowflake) ([]*FinalRecord, error) {
+	query := `SELECT id, channel_id, title, options, answers FROM results ORDER BY id`
 	args := make([]any, 0, len(ids))
 	if len(ids) > 0 {
 		placeholders := strings.Repeat("?,", len(ids))
@@ -75,6 +76,12 @@ func (man *PollManager) GetFinalized(ids ...snowflake) ([]*FinalRecord, error) {
 		for _, id := range ids {
 			args = append(args, id)
 		}
+	}
+	if limit > 0 {
+		query += " LIMIT " + strconv.Itoa(limit)
+	}
+	if offset > 0 {
+		query += " OFFSET " + strconv.Itoa(offset)
 	}
 	query += `;`
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"poll-bot/root/api/alias"
 	"poll-bot/root/api/login"
 	"poll-bot/root/api/polls"
 	"time"
@@ -43,7 +44,10 @@ func initRouter(port int, rootPath string) error {
 	// API
 	r.Route(rootPath+"/api/"+API_VER, func(r chi.Router) {
 		r.Post("/login", login.ValidateLogin)
+
 		r.With(validator).Get("/polls", polls.GetPage)
+		r.With(validator).Get("/aliases", alias.GetAliases)
+		r.With(validator).Post("/aliases", alias.SetAliases)
 	})
 
 	go http.ListenAndServe(fmt.Sprintf(":%d", port), r) //always nonnil

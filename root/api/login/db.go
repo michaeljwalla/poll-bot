@@ -23,7 +23,8 @@ var verifier jwt.Verifier
 type ServerUserData = types.ServerUserData
 
 const QUERY_TIMEOUT = time.Duration(5000) * time.Millisecond
-const DEFAULT_EXPIRY = 300
+const DEFAULT_EXPIRY = time.Duration(15) * time.Minute
+
 const INIT_QUERY = `
 PRAGMA foreign_keys = on;
 
@@ -90,12 +91,12 @@ func IsOpen() bool {
 }
 
 // expects valid body
-func newServerUserData(body *LoginBody, expiry int64) *ServerUserData {
+func newServerUserData(body *LoginBody, expiry time.Duration) *ServerUserData {
 	hash := sha256.Sum256([]byte(body.Password))
 	return &ServerUserData{
 		ID:           strings.ToLower(body.ID),
 		PasswordHash: hash[:],
-		Expiry:       time.Duration(expiry) * time.Second,
+		Expiry:       expiry,
 	}
 }
 
@@ -163,7 +164,7 @@ SELECT expiry
 		return nil, err //errnorows
 	}
 	if expiry.Valid && expiry.Int64 > 0 {
-		return newServerUserData(body, expiry.Int64), nil
+		return newServerUserData(body, time.Duration(expiry.Int64)), nil
 	}
 	return newServerUserData(body, DEFAULT_EXPIRY), nil
 }

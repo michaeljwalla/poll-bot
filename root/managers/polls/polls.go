@@ -32,19 +32,19 @@ const (
 
 type snowflake = string
 
-type message struct {
+type Message struct {
 	ID        snowflake
 	ChannelID snowflake
 }
 type Poll struct {
 	Expiry      *time.Time
-	Message     message
+	Message     Message
 	Guild       snowflake          //its an extra api request from Message
 	realMessage *discordgo.Message `json:"-"`
 }
 
-func ToMessage(msg *discordgo.Message) message {
-	return message{
+func ToMessage(msg *discordgo.Message) Message {
+	return Message{
 		ID:        msg.ID,
 		ChannelID: msg.ChannelID,
 	}

@@ -12,23 +12,26 @@ import (
 var resultsInitQuery = `
 PRAGMA journal_mode = 'WAL';
 PRAGMA synchronous = 'NORMAL';
-
 CREATE TABLE IF NOT EXISTS results (
-    id         BIGINT        NOT NULL,
-    channel_id BIGINT        NOT NULL,
-    title      VARCHAR (300) NOT NULL,
-    options    BLOB          NOT NULL,
-    answers    BLOB          NOT NULL,
+    id             BIGINT        NOT NULL,
+    channel_id     BIGINT        NOT NULL,
+    title          VARCHAR (300) NOT NULL,
+    title_override VARCHAR (300),
+    active         INTEGER       NOT NULL DEFAULT 1,
+    options        BLOB          NOT NULL,
+    answers        BLOB          NOT NULL,
     PRIMARY KEY (
         id
     )
 );
 
 CREATE TABLE IF NOT EXISTS manual (
-    id      BIGINT        NOT NULL,
-    title   VARCHAR (300) NOT NULL,
-    options BLOB          NOT NULL,
-    answers BLOB          NOT NULL,
+    id             BIGINT        NOT NULL,
+    title          VARCHAR (300) NOT NULL,
+    title_override VARCHAR (300),
+    active         INTEGER       NOT NULL DEFAULT 1,
+    options        BLOB          NOT NULL,
+    answers        BLOB          NOT NULL,
     PRIMARY KEY (
         id
     )
@@ -39,9 +42,9 @@ CREATE TABLE IF NOT EXISTS manual (
 // Discord-sourced polls carry. Nothing reads it back off a record, so manual
 // rows select a constant rather than the table carrying a dead column.
 // Manual rows are hand-entered, so they shadow a results row of the same id.
-const finalizedSources = `SELECT id, '' AS channel_id, title, options, answers FROM manual
+const finalizedSources = `SELECT id, '' AS channel_id, COALESCE(title_override, title) AS title, active, options, answers FROM manual
 	UNION ALL
-	SELECT id, channel_id, title, options, answers FROM results
+	SELECT id, channel_id, COALESCE(title_override, title) AS title, active, options, answers FROM results
 	WHERE id NOT IN (SELECT id FROM manual)`
 
 type RecordAnswer struct {
@@ -54,6 +57,7 @@ type FinalRecord struct {
 	Options  []string
 	Metadata Poll
 	Title    string
+	Active   bool
 }
 
 const (
@@ -86,16 +90,24 @@ func handle_insertion_err(err error, ch chan int, cher chan<- error) (doBreak bo
 
 // Returns finalized records from both the results and manual tables. With no
 // ids, returns every row; otherwise filters by id. An id held by both tables
-// resolves to the manual row.
-func (man *PollManager) GetFinalized(offset int, limit int, ids ...snowflake) ([]*FinalRecord, error) {
-	query := `SELECT id, channel_id, title, options, answers FROM (` + finalizedSources + `)`
+// resolves to the manual row. omitInactive drops rows flagged inactive.
+func (man *PollManager) GetFinalized(offset int, limit int, omitInactive bool, ids ...snowflake) ([]*FinalRecord, error) {
+	query := `SELECT id, channel_id, title, active, options, answers FROM (` + finalizedSources + `)`
 	args := make([]any, 0, len(ids))
+	//both predicates apply to the union, so they have to share the one WHERE.
+	where := make([]string, 0, 2)
+	if omitInactive {
+		where = append(where, `active != 0`)
+	}
 	if len(ids) > 0 {
 		placeholders := strings.Repeat("?,", len(ids))
-		query += ` WHERE id IN (` + placeholders[:len(placeholders)-1] + `)`
+		where = append(where, `id IN (`+placeholders[:len(placeholders)-1]+`)`)
 		for _, id := range ids {
 			args = append(args, id)
 		}
+	}
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
 	}
 	//the filter has to land on the union before it can be ordered or paged.
 	query += ` ORDER BY id`
@@ -120,9 +132,10 @@ func (man *PollManager) GetFinalized(offset int, limit int, ids ...snowflake) ([
 		var (
 			id, channelID            snowflake
 			title                    string
+			active                   int
 			optionsBlob, answersBlob []byte
 		)
-		ok, err := iter.NextScan(&id, &channelID, &title, &optionsBlob, &answersBlob)
+		ok, err := iter.NextScan(&id, &channelID, &title, &active, &optionsBlob, &answersBlob)
 		if err != nil {
 			return out, err
 		}
@@ -146,6 +159,7 @@ func (man *PollManager) GetFinalized(offset int, limit int, ids ...snowflake) ([
 			Options:  options,
 			Metadata: Poll{Message: Message{ID: id, ChannelID: channelID}},
 			Title:    title,
+			Active:   active != 0,
 		})
 	}
 	return out, nil
@@ -155,11 +169,11 @@ func (man *PollManager) GetFinalized(offset int, limit int, ids ...snowflake) ([
 // int channel blocking
 func (man *PollManager) Insert(mode fetchMode, done chan int, cher chan<- error, p ...Poll) error {
 	valueBuilder := strings.Builder{}
-	valueSet := "(?, ?, ?, ?, ?)"
+	valueSet := "(?, ?, ?, ?, ?, ?, ?)"
 	valueBuilder.Write([]byte(`REPLACE INTO results
-		(id, channel_id, title, options, answers)
+		(id, channel_id, title, title_override, active, options, answers)
 		VALUES `))
-	records := make([]any, 0, len(p)*4)
+	records := make([]any, 0, len(p)*7)
 	rowCount := 0 //rows actually appended (i can advance past skipped items)
 
 	channeled := done != nil && cher != nil
@@ -266,11 +280,14 @@ func (man *PollManager) Insert(mode fetchMode, done chan int, cher chan<- error,
 			}
 		}
 
-		// id, channel_id, title,optionblob, answerblob
+		// id, channel_id, title, title_override, active, optionblob, answerblob
+		//Discord owns the title, so there is no override until someone sets one.
 		records = append(records,
 			&poll.realMessage.ID,
 			&poll.realMessage.ChannelID,
 			&pd.Question.Text,
+			nil,
+			1,
 			&jsonOptions,
 			&jsonAnswers,
 		)
@@ -317,11 +334,11 @@ func (man *PollManager) InsertManual(records ...*FinalRecord) error {
 		return nil
 	}
 	valueBuilder := strings.Builder{}
-	valueSet := "(?, ?, ?, ?)"
+	valueSet := "(?, ?, ?, ?, ?, ?)"
 	valueBuilder.WriteString(`REPLACE INTO manual
-		(id, title, options, answers)
+		(id, title, title_override, active, options, answers)
 		VALUES `)
-	args := make([]any, 0, len(records)*4)
+	args := make([]any, 0, len(records)*6)
 	rowCount := 0 //rows actually appended (nil records are skipped)
 
 	for _, rec := range records {
@@ -354,8 +371,10 @@ func (man *PollManager) InsertManual(records ...*FinalRecord) error {
 			valueBuilder.WriteString(", ")
 		}
 		valueBuilder.WriteString(valueSet)
-		// id, title, optionblob, answerblob
-		args = append(args, id, rec.Title, jsonOptions, jsonAnswers)
+		// id, title, title_override, active, optionblob, answerblob
+		//a hand-entered title is itself the override; title keeps a copy so
+		//clearing the override later still leaves the row with a name.
+		args = append(args, id, rec.Title, rec.Title, 1, jsonOptions, jsonAnswers)
 		rowCount++
 	}
 	if rowCount == 0 {
@@ -364,4 +383,31 @@ func (man *PollManager) InsertManual(records ...*FinalRecord) error {
 	valueBuilder.WriteString(";")
 	_, err := man.finalized.Exec(valueBuilder.String(), args...)
 	return err
+}
+
+// Flips the active flag on existing rows. An id may live in either table, so
+// both are updated; ids matching nothing are silently no-ops.
+func (man *PollManager) SetActive(active bool, ids ...snowflake) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	placeholders := strings.Repeat("?,", len(ids))
+	filter := ` WHERE id IN (` + placeholders[:len(placeholders)-1] + `);`
+
+	flag := 0
+	if active {
+		flag = 1
+	}
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, flag)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+
+	for _, table := range [...]string{"manual", "results"} {
+		if _, err := man.finalized.Exec(`UPDATE `+table+` SET active = ?`+filter, args...); err != nil {
+			return fmt.Errorf("setting active on %s: %v", table, err)
+		}
+	}
+	return nil
 }

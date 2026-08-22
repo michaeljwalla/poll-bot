@@ -48,10 +48,11 @@ func initRouter(port int, rootPath string) error {
 
 		// paginated polls getter
 		r.With(validator).Get("/polls", polls.GetPage)
+		r.With(validator).Put("/polls", polls.AddPolls)
 
 		// aliases endpoint
 		r.With(validator).Get("/aliases", alias.GetAliases)
-		r.With(validator).Post("/aliases", alias.SetAliases)
+		r.With(validator).Put("/aliases", alias.SetAliases)
 	})
 
 	go http.ListenAndServe(fmt.Sprintf(":%d", port), r) //always nonnil

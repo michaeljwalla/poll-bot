@@ -25,9 +25,10 @@ var answerMap = map[string]string{
 }
 
 type pollPair struct {
-	time  int64
-	title string
-	votes *int
+	time   int64
+	title  string
+	votes  *int
+	active bool
 }
 
 func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager) (*strings.Builder, error) {
@@ -57,13 +58,18 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 		}
 		pollVotes := 0
 		pollOrder = append(pollOrder, pollPair{
-			time: time.Unix(), title: rec.Title, votes: &pollVotes,
+			time: time.Unix(), title: rec.Title, votes: &pollVotes, active: rec.Active,
 		})
 
+		//a poll can total zero votes either because its answers are not a
+		//rating scale at all, or because every voter abstained with N/A.
+		//Only the first is noise worth dropping.
+		isRating := true
 		match := regexp.MustCompile(`^(⭐+|N/A)(?: \(.*\))?$`)
 		for _, choice := range rec.Answers {
 			segments := match.FindStringSubmatch(choice.Title)
 			if len(segments) <= 1 { //def not one
+				isRating = false
 				pollVotes = 0
 				break
 			}
@@ -93,8 +99,7 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 				}
 			}
 		}
-		//likely not a rating
-		if pollVotes == 0 {
+		if !isRating {
 			delete(mappedRecData, rec.Title)
 		}
 	}
@@ -107,7 +112,7 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 
 	//build now
 	out := strings.Builder{}
-	out.WriteString("Date, Topic, Total, ")
+	out.WriteString("Date, Active, Topic, Total, ")
 	for _, id := range voterOrder {
 		fmt.Fprintf(&out, "%s, ", voterNames[id])
 	}
@@ -119,7 +124,11 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 			continue
 		}
 		time, title, votes := time.Unix(pair.time, 0).Format("01/02/2006"), pair.title, *pair.votes
-		fmt.Fprintf(&out, "\n%s, %s, %d, ", time, title, votes)
+		active := 0
+		if pair.active {
+			active = 1
+		}
+		fmt.Fprintf(&out, "\n%s, %d, %s, %d, ", time, active, title, votes)
 
 		for _, id := range voterOrder {
 			msg, ok := thisPoll[id]

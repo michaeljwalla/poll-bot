@@ -43,9 +43,13 @@ func initRouter(port int, rootPath string) error {
 
 	// API
 	r.Route(rootPath+"/api/"+API_VER, func(r chi.Router) {
+		// login (no validator)
 		r.Post("/login", login.ValidateLogin)
 
+		// paginated polls getter
 		r.With(validator).Get("/polls", polls.GetPage)
+
+		// aliases endpoint
 		r.With(validator).Get("/aliases", alias.GetAliases)
 		r.With(validator).Post("/aliases", alias.SetAliases)
 	})

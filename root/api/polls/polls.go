@@ -201,3 +201,43 @@ func AddPolls(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusCreated)
 }
+
+type SetActiveWeb struct {
+	ID     string `json:"id"`
+	Active bool   `json:"active"`
+}
+
+func SetActive(w http.ResponseWriter, r *http.Request) {
+	bcp, err := general.GetBCP()
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
+	var setters []SetActiveWeb
+	err = json.NewDecoder(r.Body).Decode(&setters)
+	//
+	if err != nil {
+		general.ErrWrite(w, http.StatusBadRequest, err)
+		return
+	}
+
+	var active, inactive = make([]string, 0), make([]string, 0)
+	for _, setter := range setters {
+		if setter.Active {
+			active = append(active, setter.ID)
+		} else {
+			inactive = append(inactive, setter.ID)
+		}
+	}
+	err = bcp.Polls.SetActive(false, inactive...)
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
+	err = bcp.Polls.SetActive(true, active...)
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(200)
+}

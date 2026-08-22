@@ -49,6 +49,7 @@ func initRouter(port int, rootPath string) error {
 		// paginated polls getter
 		r.With(validator).Get("/polls", polls.GetPage)
 		r.With(validator).Put("/polls", polls.AddPolls)
+		r.With(validator).Patch("/polls/activate", polls.SetActive)
 
 		// aliases endpoint
 		r.With(validator).Get("/aliases", alias.GetAliases)

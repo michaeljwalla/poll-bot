@@ -25,11 +25,14 @@ var answerMap = map[string]string{
 }
 
 type pollPair struct {
+	id     string
 	time   int64
 	title  string
 	votes  *int
 	active bool
 }
+
+var titleFilter = regexp.MustCompile(",")
 
 func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager) (*strings.Builder, error) {
 	var file *os.File
@@ -52,13 +55,14 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 	for _, rec := range recs {
 		thisPoll := make(map[snowflake]string)
 		mappedRecData[rec.Title] = thisPoll
-		time, err := unix.SnowflakeToTime(rec.Metadata.Message.ID)
+		id := rec.Metadata.Message.ID
+		time, err := unix.SnowflakeToTime(id)
 		if err != nil {
 			continue
 		}
 		pollVotes := 0
 		pollOrder = append(pollOrder, pollPair{
-			time: time.Unix(), title: rec.Title, votes: &pollVotes, active: rec.Active,
+			id: id, time: time.Unix(), title: titleFilter.ReplaceAllString(rec.Title, ""), votes: &pollVotes, active: rec.Active,
 		})
 
 		//a poll can total zero votes either because its answers are not a
@@ -112,7 +116,7 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 
 	//build now
 	out := strings.Builder{}
-	out.WriteString("Date, Active, Topic, Total, ")
+	out.WriteString("ID, Date, Active, Topic, Total, ")
 	for _, id := range voterOrder {
 		fmt.Fprintf(&out, "%s, ", voterNames[id])
 	}
@@ -123,12 +127,12 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 		if !ok { //zero-vote poll, dropped upstream
 			continue
 		}
-		time, title, votes := time.Unix(pair.time, 0).Format("01/02/2006"), pair.title, *pair.votes
+		id, time, title, votes := pair.id, time.Unix(pair.time, 0).Format("01/02/2006"), pair.title, *pair.votes
 		active := 0
 		if pair.active {
 			active = 1
 		}
-		fmt.Fprintf(&out, "\n%s, %d, %s, %d, ", time, active, title, votes)
+		fmt.Fprintf(&out, "\n%s, %s, %d, %s, %d, ", id, time, active, title, votes)
 
 		for _, id := range voterOrder {
 			msg, ok := thisPoll[id]

@@ -11,6 +11,7 @@ import (
 )
 
 var newErrResponse = general.NewErrResponse
+var ErrBadBody = errors.New("cannot parse body")
 
 type LoginBody = types.LoginBody
 type LoginResponse = types.LoginResponse
@@ -86,7 +87,7 @@ func isValidPass(s string) bool {
 
 func validateLoginBody(w http.ResponseWriter, r *http.Request, body *LoginBody) bool {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		general.ErrWrite(w, http.StatusBadRequest, errors.New("cannot parse body"))
+		general.ErrWrite(w, http.StatusBadRequest, ErrBadBody)
 		return false
 	}
 
@@ -131,10 +132,10 @@ func blockTokenUnauthorized(w http.ResponseWriter) {
 	general.ErrWrite(w, http.StatusUnauthorized, ErrNoToken)
 }
 
-func ValidateLogin(w http.ResponseWriter, r *http.Request) {
+func checkLogin(w http.ResponseWriter, r *http.Request) (*ServerUserData, error) {
 	var body LoginBody
 	if !validateLoginBody(w, r, &body) {
-		return
+		return nil, ErrBadBody
 	}
 
 	//try login
@@ -142,10 +143,17 @@ func ValidateLogin(w http.ResponseWriter, r *http.Request) {
 	switch err {
 	case sql.ErrNoRows:
 		general.ErrWrite(w, http.StatusUnauthorized, ErrInvalidLogin)
-		return
+		return nil, ErrInvalidLogin
 	case nil:
 	default:
 		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return nil, err
+	}
+	return data, err
+}
+func ValidateLogin(w http.ResponseWriter, r *http.Request) {
+	data, err := checkLogin(w, r)
+	if err != nil {
 		return
 	}
 
@@ -166,6 +174,35 @@ func ValidateLogin(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
 
+type TokenJSON struct {
+	Token string `json:"token"`
+}
+
+func GetLoginTokenJSON(w http.ResponseWriter, r *http.Request) {
+	token, _ := getUnverifiedTokenFromCookie(r)
+	if token == nil {
+		data, err := checkLogin(w, r)
+		if err != nil {
+			return
+		}
+
+		//gen session token
+		jwt, err := newTokenForUser(data)
+		if err != nil {
+			general.ErrWrite(w, http.StatusInternalServerError, err)
+			return
+		}
+		token = jwt.Bytes()
+	}
+
+	data, err := json.Marshal(&TokenJSON{string(token)})
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	w.Write(data)
+}
 func MiddlewareTokenValidator(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		existingToken, err := getUnverifiedTokenFromCookie(r)

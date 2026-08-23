@@ -385,16 +385,21 @@ func (man *PollManager) InsertManual(records ...*FinalRecord) error {
 	return err
 }
 func (man *PollManager) Drop(ids ...snowflake) error {
-	const query = `DELETE FROM results WHERE id in (%s); DELETE FROM manual WHERE id in (%s);`
+	const query = `DELETE FROM results WHERE id IN (%s); DELETE FROM manual WHERE id IN (%s);`
 	builder := strings.Builder{}
+	args := make([]any, 0, len(ids)*2)
 	for i, id := range ids {
-		fmt.Fprintf(&builder, "'%s'", id)
+		args = append(args, &id)
+		builder.WriteString("?")
 		if i != len(ids)-1 {
 			builder.WriteString(", ")
 		}
 	}
-	out := builder.String()
-	_, err := man.finalized.Exec(fmt.Sprintf(query, out, out))
+	// dupe list bc two commands
+	args = append(args, args...)
+
+	numArgs := builder.String()
+	_, err := man.finalized.Exec(fmt.Sprintf(query, numArgs, numArgs), args...)
 	return err
 }
 

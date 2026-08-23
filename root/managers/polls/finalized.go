@@ -384,6 +384,19 @@ func (man *PollManager) InsertManual(records ...*FinalRecord) error {
 	_, err := man.finalized.Exec(valueBuilder.String(), args...)
 	return err
 }
+func (man *PollManager) Drop(ids ...snowflake) error {
+	const query = `DELETE FROM results WHERE id in (%s); DELETE FROM manual WHERE id in (%s);`
+	builder := strings.Builder{}
+	for i, id := range ids {
+		fmt.Fprintf(&builder, "'%s'", id)
+		if i != len(ids)-1 {
+			builder.WriteString(", ")
+		}
+	}
+	out := builder.String()
+	_, err := man.finalized.Exec(fmt.Sprintf(query, out, out))
+	return err
+}
 
 // Flips the active flag on existing rows. An id may live in either table, so
 // both are updated; ids matching nothing are silently no-ops.

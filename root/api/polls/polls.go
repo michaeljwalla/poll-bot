@@ -241,3 +241,23 @@ func SetActive(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(200)
 }
+
+func DropPolls(w http.ResponseWriter, r *http.Request) {
+	bcp, err := general.GetBCP()
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
+	var ids []string
+	err = json.NewDecoder(r.Body).Decode(&ids)
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
+	err = bcp.Polls.Drop(ids...)
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

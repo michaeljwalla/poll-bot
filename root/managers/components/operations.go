@@ -52,7 +52,7 @@ func (man *ComponentCallbackManager) applyRules(group grouping) error {
 		//
 		for id := range man.data[group] {
 			if rules.InvalidationCloses {
-				if _, err := man.data[group][id].callbacks["close"](nil); err != nil {
+				if _, err := man.data[group][id].callbacks[group+"-close"](nil); err != nil {
 					return fmt.Errorf("while applying rules -> closing invalidated group %s ID %s: %v", group, id, err)
 				}
 			}
@@ -68,7 +68,7 @@ func (man *ComponentCallbackManager) close(group grouping, c *ComponentCallbacks
 	man.mutex.Lock()
 	defer man.mutex.Unlock()
 	//
-	_, err := c.callbacks["close"](i)
+	_, err := c.callbacks[group+"-close"](i)
 	if err != nil {
 		return fmt.Errorf("(failed) while closing group %s ID %s: err", group, c.intxnID)
 	}
@@ -84,14 +84,14 @@ func (man *ComponentCallbackManager) Register(group grouping, c *ComponentCallba
 	g, ok := man.data[group]
 	man.mutex.RUnlock()
 	if !ok {
-		return errors.New("no such grouping: " + group)
+		return errors.New("no such grouping: " + group + ". did you forget to AddGroup()?")
 	}
 	if err := man.applyRules(group); err != nil {
 		return err
 	}
 
 	//validate close
-	if _, ok := c.callbacks["close"]; !ok {
+	if _, ok := c.callbacks[group+"-close"]; !ok {
 		return fmt.Errorf("group (%s) register attempt without close(): %v", group, c)
 	}
 
@@ -157,7 +157,17 @@ func (man *ComponentCallbackManager) TryRun(i *discordgo.InteractionCreate) (bus
 	}
 	defer c.busy.Store(false)
 	//
-	cid := i.MessageComponentData().CustomID
+	var cid string
+	switch i.Type {
+	case discordgo.InteractionApplicationCommand:
+		cid = i.ApplicationCommandData().ID
+	case discordgo.InteractionMessageComponent:
+		cid = i.MessageComponentData().CustomID
+	case discordgo.InteractionModalSubmit:
+		cid = i.ModalSubmitData().CustomID
+	default:
+		return false, fmt.Errorf("unhandled TryRun interaction type: %v", i.Type)
+	}
 	callback, ok := c.callbacks[cid]
 	if !ok {
 		return false, fmt.Errorf("unknown CustomID: %v", cid)
@@ -170,7 +180,7 @@ func (man *ComponentCallbackManager) TryRun(i *discordgo.InteractionCreate) (bus
 
 	//this way you can have a component explicitly for closing,
 	//or another callback can signify the close should happen.
-	if done && cid != "close" {
+	if done && cid != groupstr+"-close" {
 		return false, man.close(groupstr, c, i)
 	}
 	return false, nil

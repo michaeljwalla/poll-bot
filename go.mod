@@ -4,6 +4,8 @@ go 1.26.5
 
 require (
 	github.com/bwmarrin/discordgo v0.29.0
+	github.com/cristalhq/jwt/v5 v5.4.0
+	github.com/go-chi/chi/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	modernc.org/sqlite v1.56.0
 )

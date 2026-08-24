@@ -213,6 +213,6 @@ func createInteractionSession(bcp *types.BotCommandPackage, s *discordgo.Session
 	return bcp.Components.Register("load", components.NewComponentCallbacks(i.Member.User.ID, map[string]components.Callback{
 		"load-continue": inject(iLoadContinue),
 		"load-stop":     inject(iLoadStop),
-		"close":         inject(iClose),
+		"load-close":    inject(iClose),
 	}))
 }

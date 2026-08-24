@@ -101,19 +101,24 @@ func (wr *resultsWorker) tryAddToBatch() (ok bool, full bool, poll *Poll) {
 		return true, true, nil
 	}
 
-	poll, ok = wr.man.queue.Peek()
-	if !ok { //queue empty; caller handles batch state
+	// the expiry check has to happen inside the take, or another worker can
+	// swap the top out between deciding and popping.
+	poll, taken, err := wr.man.queue.TryTake(func(p *Poll) bool {
+		return p.Expiry == nil || !time.Now().Before(*p.Expiry)
+	})
+	if err != nil {
+		wr.logger.Warn(fmt.Sprintf("while taking from queue: %v", err), audit.LogGroup.WORKER)
+	}
+	if poll == nil { //queue empty; caller handles batch state
 		return false, false, nil
 	}
-	if poll.Expiry != nil && time.Now().Before(*poll.Expiry) { //not expired
+	if !taken { //not expired; caller waits on it
 		return false, false, poll
 	}
-	if ok, _ := wr.man.queue.TryTake(poll); ok {
-		wr.batch = append(wr.batch, *poll)
-		wr.man.set.Remove(poll.Message.ID)
-		wr.man.releaseSubscribers()
-	}
-	return ok, len(wr.batch) == wr.max_batch, nil
+	wr.batch = append(wr.batch, *poll)
+	wr.man.set.Remove(poll.Message.ID)
+	wr.man.releaseSubscribers()
+	return true, len(wr.batch) == wr.max_batch, nil
 }
 
 func (wr *resultsWorker) waitForPoll(p *Poll) {
@@ -206,7 +211,11 @@ func (wr *resultsWorker) Start() {
 					toRequeue = wr.batch[finalIndex:] //unwritten tail only
 					wr.sendMessage(WORKER_BUSY, fmt.Sprintf("I wrote %d/%d polls.", finalIndex, batchSize))
 				}
-				man.queue.Merge(toRequeue...) //nolint
+				// via Push, not queue.Merge: Insert re-queues polls Discord
+				// has not finalized yet, so the tail can contain ids that are
+				// already back in the heap. Merge bypasses man.set and would
+				// seat a second copy of each.
+				man.Push(toRequeue...) //nolint
 				clear(wr.batch)
 				wr.batch = wr.batch[:0] //reset len, keep original cap
 				finalIndex = 0
@@ -218,7 +227,7 @@ func (wr *resultsWorker) Start() {
 	}
 	//do cleanup
 	wr.sendMessage(WORKER_STOPPING, "Cleaning up")
-	man.queue.Merge(wr.batch[finalIndex:]...) //nolint
+	man.Push(wr.batch[finalIndex:]...) //nolint
 	//signal safe to mutate
 	wr.halt <- 0
 	wr.sendMessage(WORKER_STOPPED, "Done")

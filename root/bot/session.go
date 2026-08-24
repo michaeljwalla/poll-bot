@@ -128,6 +128,39 @@ func Start(instr StartInstructions) (session *Session, err error) {
 			} else if busy {
 				logger.Warn("Component command ignored (busy)", audit.LogGroup.BOT, audit.LogGroup.INTERACT)
 			}
+		case discordgo.InteractionModalSubmit:
+			ack(s, i, logger, discordgo.InteractionResponseDeferredMessageUpdate)
+			id := i.Member.User.ID
+			group, ok := components.GroupOf(id)
+			if !ok {
+				logger.Warn("no group assigned to this interaction.", audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+				return
+			}
+
+			alias := aliases.GetAlias(id)
+
+			componentData := i.ModalSubmitData()
+			var statusChar string
+			metadata, err := components.GetMetadata(group)
+			if err != nil {
+				logger.Warn(err, audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+				return
+			}
+			canUse := auth.CanUse(id, (*handles)[metadata.FromHandle].Metadata.MinTrustLevel)
+			if !canUse {
+				statusChar = "❌"
+			} else {
+				statusChar = "✅"
+			}
+			logger.Add(fmt.Sprintf("%v %33s %02d %s| Modal-> %s", id, alias, auth.GetRank(id), statusChar, componentData.CustomID), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+			if !canUse {
+				return
+			}
+			if busy, err := components.TryRun(i); err != nil {
+				logger.Warn(fmt.Sprintf("While handling Modal %s: %v", componentData.CustomID, err), audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+			} else if busy {
+				logger.Warn("Component command ignored (busy)", audit.LogGroup.BOT, audit.LogGroup.INTERACT)
+			}
 		}
 	})
 

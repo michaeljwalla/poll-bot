@@ -37,7 +37,7 @@ func Register(bcp *types.BotCommandPackage) {
 				return err
 			}
 
-			records, err := bcp.Polls.GetFinalized()
+			records, err := bcp.Polls.GetFinalized(0, 0, true)
 			if err != nil {
 				msg := fmt.Sprintf("I couldn't access the DB: %v", err)
 				s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{ //nolint

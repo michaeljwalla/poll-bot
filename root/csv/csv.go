@@ -25,17 +25,25 @@ var answerMap = map[string]string{
 }
 
 type pollPair struct {
-	time  int64
-	title string
-	votes *int
+	id     string
+	time   int64
+	title  string
+	votes  *int
+	active bool
 }
 
-func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager) (*string, error) {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return nil, err
+var titleFilter = regexp.MustCompile(",")
+
+func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager) (*strings.Builder, error) {
+	var file *os.File
+	var err error
+	if path != "" {
+		file, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close() //nolint
 	}
-	defer file.Close() //nolint
 	// const HEADER = "Date, Topic, Total, Users...,  <END>"
 
 	voterNames := make(map[snowflake]string)
@@ -47,19 +55,25 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 	for _, rec := range recs {
 		thisPoll := make(map[snowflake]string)
 		mappedRecData[rec.Title] = thisPoll
-		time, err := unix.SnowflakeToTime(rec.Metadata.Message.ID)
+		id := rec.Metadata.Message.ID
+		time, err := unix.SnowflakeToTime(id)
 		if err != nil {
 			continue
 		}
 		pollVotes := 0
 		pollOrder = append(pollOrder, pollPair{
-			time: time.Unix(), title: rec.Title, votes: &pollVotes,
+			id: id, time: time.Unix(), title: titleFilter.ReplaceAllString(rec.Title, ""), votes: &pollVotes, active: rec.Active,
 		})
 
+		//a poll can total zero votes either because its answers are not a
+		//rating scale at all, or because every voter abstained with N/A.
+		//Only the first is noise worth dropping.
+		isRating := true
 		match := regexp.MustCompile(`^(⭐+|N/A)(?: \(.*\))?$`)
 		for _, choice := range rec.Answers {
 			segments := match.FindStringSubmatch(choice.Title)
 			if len(segments) <= 1 { //def not one
+				isRating = false
 				pollVotes = 0
 				break
 			}
@@ -89,8 +103,7 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 				}
 			}
 		}
-		//likely not a rating
-		if pollVotes == 0 {
+		if !isRating {
 			delete(mappedRecData, rec.Title)
 		}
 	}
@@ -103,7 +116,7 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 
 	//build now
 	out := strings.Builder{}
-	out.WriteString("Date, Topic, Total, ")
+	out.WriteString("ID, Date, Active, Topic, Total, ")
 	for _, id := range voterOrder {
 		fmt.Fprintf(&out, "%s, ", voterNames[id])
 	}
@@ -114,8 +127,12 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 		if !ok { //zero-vote poll, dropped upstream
 			continue
 		}
-		time, title, votes := time.Unix(pair.time, 0).Format("01/02/2006"), pair.title, *pair.votes
-		fmt.Fprintf(&out, "\n%s, %s, %d, ", time, title, votes)
+		id, time, title, votes := pair.id, time.Unix(pair.time, 0).Format("01/02/2006"), pair.title, *pair.votes
+		active := 0
+		if pair.active {
+			active = 1
+		}
+		fmt.Fprintf(&out, "\n%s, %s, %d, %s, %d, ", id, time, active, title, votes)
 
 		for _, id := range voterOrder {
 			msg, ok := thisPoll[id]
@@ -126,7 +143,9 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 		}
 		out.WriteString("<END>")
 	}
-	final := out.String()
-	file.Write([]byte(final)) //nolint
-	return &final, nil
+	if file != nil {
+		_, err := file.WriteString(out.String())
+		return &out, err
+	}
+	return &out, nil
 }

@@ -86,7 +86,12 @@ func New[K any](path string, less func(*K, *K) bool, validate func(*K) bool) (*F
 
 func (heap *FileHeap[K]) Iter() iter.Seq[K] {
 	return func(yield func(K) bool) {
-		for _, item := range heap.inner.data {
+		heap.mutex.RLock()
+		snapshot := make([]K, len(heap.inner.data))
+		copy(snapshot, heap.inner.data)
+		heap.mutex.RUnlock()
+		//
+		for _, item := range snapshot {
 			if !yield(item) {
 				return
 			}
@@ -119,25 +124,43 @@ func (heap *FileHeap[K]) Push(value K) error {
 	return err
 }
 
-// given the value from a Peek(), attempt to take (Pop) it.
-// only returns true when you win + no err
-func (heap *FileHeap[K]) TryTake(value *K) (bool, error) {
-	x, ok := heap.Peek()
-	if !ok || x != value {
-		return false, nil
+// TryTake pops the top of the heap if want says to keep it. The predicate is
+// evaluated on the top under the same write lock that does the pop, so nothing
+// can push, pop or merge in between the decision and the take. want must not
+// touch the heap itself; it would deadlock on the lock already held.
+//
+// top is nil when the heap is empty, and otherwise points at a copy of the top
+// - the popped item when taken, the still-queued one when want declined it.
+// A non-nil err means the item was taken but the file may still hold its row.
+func (heap *FileHeap[K]) TryTake(want func(*K) bool) (top *K, taken bool, err error) {
+	if err := heap.lockOrClosed(); err != nil {
+		return nil, false, err
 	}
-	_, err := heap.Pop()
-	if err != nil {
-		return false, err
+	defer heap.mutex.Unlock()
+	if heap.inner.Len() == 0 {
+		return nil, false, nil
 	}
-	return true, nil
+	//copied so the caller never holds a pointer into the backing array
+	value := heap.inner.data[0]
+	if !want(&value) {
+		return &value, false, nil
+	}
+	popped, err := heap.popLocked()
+	return &popped, true, err
 }
+
 func (heap *FileHeap[K]) Pop() (K, error) {
 	var zero K
 	if err := heap.lockOrClosed(); err != nil {
 		return zero, err
 	}
 	defer heap.mutex.Unlock()
+	return heap.popLocked()
+}
+
+// caller holds the write lock and has already checked closed
+func (heap *FileHeap[K]) popLocked() (K, error) {
+	var zero K
 	if heap.inner.Len() == 0 {
 		return zero, errors.New("empty")
 	}
@@ -153,6 +176,9 @@ func (heap *FileHeap[K]) Pop() (K, error) {
 }
 
 func (heap *FileHeap[K]) Merge(value ...K) error {
+	if len(value) == 0 { //otherwise builds a VALUES clause with no rows
+		return nil
+	}
 	if err := heap.lockOrClosed(); err != nil {
 		return err
 	}
@@ -181,13 +207,18 @@ func (heap *FileHeap[K]) Merge(value ...K) error {
 	return err
 }
 
-func (heap *FileHeap[K]) Peek() (*K, bool) {
+// Peek returns a copy of the top. The copy is deliberate: a pointer into the
+// backing array stays valid across mutations that reorder or replace whatever
+// lives in that slot, so a caller holding one cannot tell whether it is still
+// looking at the item it peeked. To act on the top, use TryTake - a Peek that
+// a later call has to trust is exactly the race this type had.
+func (heap *FileHeap[K]) Peek() (value K, ok bool) {
 	heap.mutex.RLock()
 	defer heap.mutex.RUnlock()
 	if len(heap.inner.data) == 0 {
-		return nil, false
+		return value, false
 	}
-	return &heap.inner.data[0], true
+	return heap.inner.data[0], true
 }
 
 // reset heap to file contents. call init after.
@@ -260,7 +291,9 @@ func (heap *FileHeap[K]) Parent(i int) (value K, ok bool) {
 	return heap.At((i - 1) / 2) //int div floored
 }
 func (heap *FileHeap[K]) At(i int) (value K, ok bool) {
-	if i < 0 || i >= heap.Len() {
+	heap.mutex.RLock()
+	defer heap.mutex.RUnlock()
+	if i < 0 || i >= heap.inner.Len() {
 		return
 	}
 	return heap.inner.data[i], true

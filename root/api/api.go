@@ -46,6 +46,7 @@ func initRouter(port int, rootPath string) error {
 		// login (no validator)
 		r.Post("/login", login.ValidateLogin)
 		r.Post("/login/json", login.GetLoginTokenJSON)
+		r.With(validator).Get("/login/check", func(http.ResponseWriter, *http.Request) {}) //no further check needed
 
 		// paginated polls getter
 		r.With(validator).Get("/polls", polls.GetPage)

@@ -33,23 +33,14 @@ var subcommands = subCommandMap{
 type field struct {
 	Label, CustomID, Placeholder string
 }
-type credentialSet struct {
-	id       string
-	password string
-}
 type iState struct {
 	manager *web.WebManager
 	// modal has no message. use state.message
 	interaction intxn
 
-	// nil means bad input
-	credentials *credentialSet
-
 	// nil means create message, otherwise edit
 	message *discordgo.Message
 }
-
-type snowflake = string
 
 type registerCallback = func(intxn) (bool, error)
 type stateCallback = func(session, *iState) (bool, error)

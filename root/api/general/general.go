@@ -31,5 +31,5 @@ func NewErrResponse(code int, msg string) []byte {
 
 func ErrWrite(w http.ResponseWriter, status int, err error) {
 	w.WriteHeader(status)
-	w.Write(NewErrResponse(status, err.Error()))
+	w.Write(NewErrResponse(status, err.Error())) //nolint
 }

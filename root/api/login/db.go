@@ -68,7 +68,7 @@ func Start(path string, signingKey []byte) error {
 		return err
 	}
 	if !database.CompareAndSwap(nil, db) {
-		db.Close()
+		db.Close() //nolint
 		return ErrDbExists
 	}
 	if _, err := db.Exec(INIT_QUERY); err != nil {
@@ -76,12 +76,12 @@ func Start(path string, signingKey []byte) error {
 	}
 	signer, err = jwt.NewSignerHS(jwt.HS256, signingKey)
 	if err != nil {
-		db.Close()
+		db.Close() //nolint
 		return err
 	}
 	verifier, err = jwt.NewVerifierHS(jwt.HS256, signingKey)
 	if err != nil {
-		db.Close()
+		db.Close() //nolint
 		return err
 	}
 	return nil

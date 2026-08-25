@@ -11,7 +11,6 @@ import (
 	"strings"
 )
 
-var newErrResponse = general.NewErrResponse
 var ErrBadBody = errors.New("cannot parse body")
 
 type LoginBody = types.LoginBody
@@ -224,8 +223,12 @@ func GetLoginTokenJSON(w http.ResponseWriter, r *http.Request) {
 		general.ErrWrite(w, http.StatusInternalServerError, err)
 		return
 	}
+	_, err = w.Write(data)
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
 	w.WriteHeader(http.StatusCreated)
-	w.Write(data)
 }
 func MiddlewareTokenValidator(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

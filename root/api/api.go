@@ -77,7 +77,7 @@ func initRouter(port int, rootPath string) error {
 		r.Handle(rootPath, http.RedirectHandler(rootPath+"/", http.StatusMovedPermanently))
 	}
 
-	go http.ListenAndServe(fmt.Sprintf(":%d", port), r) //always nonnil
+	go http.ListenAndServe(fmt.Sprintf(":%d", port), r) //nolint
 	return nil
 }
 

@@ -33,7 +33,11 @@ func GetAliases(w http.ResponseWriter, r *http.Request) {
 
 	header := w.Header()
 	header.Add("Content-Type", "application/json")
-	w.Write(buf.Bytes())
+	_, err = w.Write(buf.Bytes())
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 

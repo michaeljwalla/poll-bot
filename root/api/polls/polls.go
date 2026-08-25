@@ -99,15 +99,23 @@ func GetPage(w http.ResponseWriter, r *http.Request) {
 
 	var buf bytes.Buffer
 	zipped := gzip.NewWriter(&buf)
-	zipped.Write([]byte(writer.String()))
-	zipped.Close()
+	_, err = zipped.Write([]byte(writer.String()))
+	zipped.Close() //nolint
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
 
 	header.Add("Content-Encoding", "gzip")
 	header.Add("Content-Type", "text/csv")
 	header.Add("X-Next-Page", strconv.Itoa(nextPage))
 	header.Add("Content-Length", strconv.Itoa(len(buf.Bytes())))
 	//
-	w.Write(buf.Bytes())
+	_, err = w.Write(buf.Bytes())
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
 	w.WriteHeader(200)
 
 }

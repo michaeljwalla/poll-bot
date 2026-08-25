@@ -39,7 +39,9 @@ func (table *AliasManager) GetAlias(id uid) alias {
 func (table *AliasManager) SetAlias(id uid, alias alias) error {
 	return table.data.Set(id, alias)
 }
-
+func (table *AliasManager) DropAlias(id uid) error {
+	return table.data.Drop(id)
+}
 func (table *AliasManager) Write() error { return table.data.SyncWrite() }
 func (table *AliasManager) Read() error  { return table.data.SyncRead() }
 

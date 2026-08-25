@@ -57,6 +57,7 @@ func initRouter(port int, rootPath string) error {
 		// aliases endpoint
 		r.With(validator).Get("/aliases", alias.GetAliases)
 		r.With(validator).Put("/aliases", alias.SetAliases)
+		r.With(validator).Delete("/aliases", alias.DropAliases)
 	})
 
 	go http.ListenAndServe(fmt.Sprintf(":%d", port), r) //always nonnil

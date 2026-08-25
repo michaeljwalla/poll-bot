@@ -91,6 +91,9 @@ func GetPage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err)
 		return //getPageContent will handle
+	} else if nextPage == 0 && writer.Len() == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
 	}
 	//
 

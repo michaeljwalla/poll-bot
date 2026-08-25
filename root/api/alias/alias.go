@@ -63,3 +63,30 @@ func SetAliases(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 }
+
+func DropAliases(w http.ResponseWriter, r *http.Request) {
+	bcp, err := general.GetBCP()
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
+	aliases := bcp.Aliases
+
+	var updates []string
+	err = json.NewDecoder(r.Body).Decode(&updates)
+	if err != nil {
+		general.ErrWrite(w, http.StatusBadRequest, err)
+		return
+	}
+
+	for _, alias := range updates {
+		err = aliases.DropAlias(alias)
+		if err != nil {
+			break
+		}
+	}
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+	}
+	w.WriteHeader(http.StatusOK)
+}

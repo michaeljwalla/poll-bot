@@ -16,6 +16,7 @@
 	type Props = {
 		lhs: PropSide;
 		rhs: PropSide;
+		disableOverride?: boolean;
 		ondel?: (
 			event: MouseEvent & { currentTarget: EventTarget & HTMLButtonElement },
 			active: boolean,
@@ -24,7 +25,7 @@
 		) => colorReturn;
 	};
 
-	const { lhs, rhs, ondel }: Props = $props();
+	const { lhs, rhs, ondel, disableOverride = $bindable(false) }: Props = $props();
 
 	let oldLeft = $derived(lhs.value);
 	let oldRight = $derived(rhs.value);
@@ -47,7 +48,7 @@
 			oldLeft = curLeft;
 		}}
 		bind:value={curLeft}
-		disabled={lhs.disabled}
+		disabled={lhs.disabled || disableOverride}
 		class="centered {color}"
 	/>
 	<input
@@ -58,12 +59,13 @@
 			oldRight = curRight;
 		}}
 		bind:value={curRight}
-		disabled={rhs.disabled}
+		disabled={rhs.disabled || disableOverride}
 		class="centered {color}"
 	/>
 	{#if ondel}
 		<button
 			class={color}
+			disabled={disableOverride}
 			onclick={(e) => {
 				color = ondel(e, delSymbol === 'X', curLeft, curRight);
 				delSymbol = color === 'red' ? '-' : 'X';

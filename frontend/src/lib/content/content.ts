@@ -91,3 +91,37 @@ export async function fetchAliases(): Promise<
 	}
 	return aliases;
 }
+
+export type Addition = { key: number; id: string; alias: string };
+type AliasWeb = { id: string; alias: string };
+export async function modAliases(
+	changes: Record<string, string[]>,
+	additions: Addition[],
+	removals: string[]
+): Promise<string | null> {
+	const query = '/api/v1/aliases';
+
+	let mods: AliasWeb[] = additions.map((row) => {
+		return { id: row.id, alias: row.alias } as AliasWeb;
+	});
+	for (const [id, alias] of Object.entries(changes)) {
+		mods.push({ id: id, alias: alias[1] });
+	}
+	const changesResp = await fetch(query, {
+		method: 'PUT',
+		credentials: 'include',
+		body: JSON.stringify(mods)
+	});
+	if (!changesResp.ok) {
+		return await changesResp.json();
+	}
+	const removalsResp = await fetch(query, {
+		method: 'DELETE',
+		credentials: 'include',
+		body: JSON.stringify(removals)
+	});
+	if (!removalsResp.ok) {
+		return await removalsResp.json();
+	}
+	return null;
+}

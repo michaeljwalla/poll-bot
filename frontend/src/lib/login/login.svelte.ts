@@ -1,74 +1,57 @@
-import { writable } from 'svelte/store';
+import { base } from '$app/paths';
 
 let isAuthenticated = $state<'yes' | 'no' | undefined>(undefined);
-let expiresAt = $state(Date.now());
+let expiresAt = $state(0);
 
 export const getAuthStatus = () => isAuthenticated;
 export const getAuthExpiry = () => expiresAt;
 
-// The session cookie is HttpOnly, so the only token the client ever sees is the one
-// the root layout load hands down. Call this whenever that value is refreshed.
-export function syncAuthExpiry(token?: string) {
-	expiresAt = (token && getTokenExpiry(token)) || 0;
-}
+type CheckResponse = { expiresAt?: number };
 
-export function getTokenExpiry(token: string) {
-	if (!token) return null;
+// The session cookie is HttpOnly, so the client can never read the token or its
+// claims. /login/check is the only source of truth for both "am I still logged
+// in" and "for how long" — it returns the expiry as unix milliseconds.
+export async function checkSession(): Promise<number | null> {
+	let resp: Response;
 	try {
-		const base64Url = token.split('.')[1];
-		const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-
-		const jsonPayload = decodeURIComponent(
-			atob(base64)
-				.split('')
-				.map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-				.join('')
-		);
-
-		const { exp } = JSON.parse(jsonPayload);
-		return exp ? (exp as number) * 1000 : null;
-	} catch (error) {
+		resp = await fetch(`${base}/api/v1/login/check`, {
+			method: 'GET',
+			credentials: 'include'
+		});
+	} catch {
+		return null;
+	}
+	if (!resp.ok) return null;
+	try {
+		const { expiresAt: exp }: CheckResponse = await resp.json();
+		return typeof exp === 'number' && exp > Date.now() ? exp : null;
+	} catch {
 		return null;
 	}
 }
+
 type CredResponse = {
 	success: boolean;
 	message?: string;
 };
-async function tryCookie(cookie: string): Promise<number | null> {
-	const resp = await fetch('/api/v1/login/check', {
-		method: 'GET',
-		credentials: 'include'
-	});
-	if (!resp.ok) return null;
-	const expiry = getTokenExpiry(cookie);
-	if (expiry && Date.now() < expiry) {
-		return expiry;
-	}
-	return null;
-}
 
-export async function tryCredentials(
-	cookie?: string,
-	id?: string,
-	pass?: string
-): Promise<CredResponse> {
+// With no id/pass this only revalidates an existing cookie; with them it logs
+// in first. Either way the expiry is refreshed from the server on success.
+export async function tryCredentials(id?: string, pass?: string): Promise<CredResponse> {
 	let success: 'yes' | 'no' = 'no';
 	let expiry: number | null = null;
 
 	try {
-		if (cookie && (expiry = await tryCookie(cookie))) {
+		if ((expiry = await checkSession())) {
 			success = 'yes';
-			return { success: true, message: 'valid cookie' };
+			return { success: true, message: 'valid session' };
 		}
 		if (!(id && pass)) return { success: false };
 
-		const resp = await fetch('/api/v1/login', {
+		const resp = await fetch(`${base}/api/v1/login`, {
 			method: 'POST',
-			body: JSON.stringify({
-				id: id,
-				password: pass
-			})
+			credentials: 'include',
+			body: JSON.stringify({ id: id, password: pass })
 		});
 		if (!resp.ok) {
 			let message: string | undefined;
@@ -77,7 +60,9 @@ export async function tryCredentials(
 			} catch {}
 			return { success: false, message };
 		}
-		//
+
+		//the login response set the cookie; ask what it is worth
+		expiry = await checkSession();
 		success = 'yes';
 		return { success: true, message: 'logging in...' };
 	} finally {

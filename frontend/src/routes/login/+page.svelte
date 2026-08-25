@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { tryCredentials } from '$lib/login/login.svelte';
 
 	let idField = $state('');
@@ -11,11 +12,9 @@
 	const onSubmit = async () => {
 		submitDisabled = true;
 		submitError = undefined;
-		const authenticated = await tryCredentials(undefined, idField, passField);
+		const authenticated = await tryCredentials(idField, passField);
 		if (authenticated.success) {
-			// pick up the freshly-set Authorization cookie so the expiry is known
-			await invalidateAll();
-			goto('/home');
+			goto(`${base}/home`);
 		} else {
 			submitDisabled = false;
 			submitError = 'Failure: ' + (authenticated.message ?? 'No response received.');

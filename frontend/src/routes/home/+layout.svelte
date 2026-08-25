@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { base } from '$app/paths';
 	import { fetchContent } from '$lib/content/content';
 
 	let { children } = $props();
@@ -24,7 +25,7 @@
 			{#if page.route.id == route}
 				<span>{title}</span>
 			{:else}
-				<a href={route}>{title}</a>
+				<a href="{base}{route}">{title}</a>
 			{/if}
 			{#if i < Object.keys(pages).length - 1}
 				{' - '}

@@ -53,8 +53,13 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 
 	//prelim validating / building aliases
 	for _, rec := range recs {
+		//the map key and the column emitted for pollPair.title must be the
+		//same string, or a title containing a comma (stripped here but not
+		//in the map key) fails the lookup below and the whole poll is
+		//silently dropped from the output.
+		filteredTitle := titleFilter.ReplaceAllString(rec.Title, "")
 		thisPoll := make(map[snowflake]string)
-		mappedRecData[rec.Title] = thisPoll
+		mappedRecData[filteredTitle] = thisPoll
 		id := rec.Metadata.Message.ID
 		time, err := unix.SnowflakeToTime(id)
 		if err != nil {
@@ -62,7 +67,7 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 		}
 		pollVotes := 0
 		pollOrder = append(pollOrder, pollPair{
-			id: id, time: time.Unix(), title: titleFilter.ReplaceAllString(rec.Title, ""), votes: &pollVotes, active: rec.Active,
+			id: id, time: time.Unix(), title: filteredTitle, votes: &pollVotes, active: rec.Active,
 		})
 
 		//a poll can total zero votes either because its answers are not a
@@ -104,7 +109,7 @@ func ToCSV(path string, recs []*polls.FinalRecord, aliases *aliases.AliasManager
 			}
 		}
 		if !isRating {
-			delete(mappedRecData, rec.Title)
+			delete(mappedRecData, filteredTitle)
 		}
 	}
 

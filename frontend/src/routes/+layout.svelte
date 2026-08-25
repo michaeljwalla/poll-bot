@@ -1,23 +1,20 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import favicon from '$lib/assets/favicon.svg';
 
 	import { onMount } from 'svelte';
-	import { tryCredentials, syncAuthExpiry } from '$lib/login/login.svelte.js';
+	import { tryCredentials } from '$lib/login/login.svelte.js';
 
-	let { children, data } = $props();
+	let { children } = $props();
 
-	// invalidateAll() after a password login re-runs the layout load, so track data.auth
-	// rather than reading it once on mount.
-	$effect(() => {
-		syncAuthExpiry(data.auth);
-	});
-
+	// No server load hands the session down any more (the deployment is a static
+	// bundle), so the cookie is validated by asking the API directly.
 	onMount(async () => {
-		if ((await tryCredentials(data.auth)).success) {
-			goto('/home');
+		if ((await tryCredentials()).success) {
+			goto(`${base}/home`);
 		} else {
-			goto('/login');
+			goto(`${base}/login`);
 		}
 	});
 </script>

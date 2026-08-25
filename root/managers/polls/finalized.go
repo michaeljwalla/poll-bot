@@ -429,3 +429,42 @@ func (man *PollManager) SetActive(active bool, ids ...snowflake) error {
 	}
 	return nil
 }
+
+// Sets title_override on existing rows. An id may live in either table, so both
+// are updated; ids matching nothing are silently no-ops. An empty title clears
+// the override, so the poll falls back to its original title.
+func (man *PollManager) SetTitleOverride(overrides map[snowflake]string) error {
+	if len(overrides) == 0 {
+		return nil
+	}
+	//one UPDATE per table serves every id via CASE, rather than one UPDATE
+	//per id. NULLIF collapses an empty title to SQL NULL so
+	//COALESCE(title_override, title) in finalizedSources falls back to the
+	//original title instead of blanking it with an empty string.
+	caseExpr := strings.Builder{}
+	caseExpr.WriteString("CASE id")
+	idList := strings.Builder{}
+	caseArgs := make([]any, 0, len(overrides)*2)
+	idArgs := make([]any, 0, len(overrides))
+	for id, title := range overrides {
+		caseExpr.WriteString(" WHEN ? THEN NULLIF(?, '')")
+		caseArgs = append(caseArgs, id, title)
+		if idList.Len() > 0 {
+			idList.WriteString(", ")
+		}
+		idList.WriteString("?")
+		idArgs = append(idArgs, id)
+	}
+	caseExpr.WriteString(" END")
+
+	args := append(caseArgs, idArgs...)
+	filter := ` WHERE id IN (` + idList.String() + `);`
+
+	for _, table := range [...]string{"manual", "results"} {
+		query := `UPDATE ` + table + ` SET title_override = ` + caseExpr.String() + filter
+		if _, err := man.finalized.Exec(query, args...); err != nil {
+			return fmt.Errorf("setting title override on %s: %v", table, err)
+		}
+	}
+	return nil
+}

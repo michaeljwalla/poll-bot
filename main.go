@@ -37,13 +37,29 @@ const (
 	DISCORD_AUTH_PATH = DATA_PATH + "discord_auth.db"
 	POLLS_PATH        = DATA_PATH + "polls/"
 	//
-	WEB_ROOT_PATH = "" // you should point this port to the root externally
 	WEB_AUTH_PATH = DATA_PATH + "web_auth.db"
 )
 
 type serverInfo struct {
 	port         int
 	signingToken string
+	rootPath     string
+	secureCookie bool
+}
+
+// The frontend is compiled against this same prefix at build time (see
+// WEB_ROOT_PATH in vite.config.ts), so the two must agree. Empty means the app
+// owns the whole origin; "/pb" means it is mounted under my-site.com/pb and a
+// reverse proxy or tunnel forwards that prefix through untouched.
+func webRootPath() string {
+	path := strings.TrimSuffix(strings.TrimSpace(os.Getenv("WEB_ROOT_PATH")), "/")
+	if path == "" {
+		return ""
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return path
 }
 
 func setEnvironmentVars() (token string, mode string, server *serverInfo) {
@@ -66,7 +82,8 @@ func setEnvironmentVars() (token string, mode string, server *serverInfo) {
 		if signingSecret == "" {
 			log.Fatal(fmt.Errorf("SERVER_PORT present without JWT_SECRET"))
 		}
-		server = &serverInfo{port, signingSecret}
+		//a PROD deployment is reached over HTTPS, so the cookie can insist on it
+		server = &serverInfo{port, signingSecret, webRootPath(), mode == "PROD"}
 	}
 	return
 }
@@ -109,12 +126,12 @@ func getManWeb(info *serverInfo) *web.WebManager {
 		return nil
 	}
 	//
-	man, err := web.New(info.port, WEB_ROOT_PATH, WEB_AUTH_PATH, []byte(info.signingToken))
+	man, err := web.New(info.port, info.rootPath, WEB_AUTH_PATH, []byte(info.signingToken), info.secureCookie)
 	if err != nil {
 		logger.Panic(fmt.Sprintf("Couldn't init poll manager: %v", err), audit.LogGroup.INIT)
 		return nil
 	}
-	logger.Add(fmt.Sprintf("Starting webserver on port %d:%s", info.port, WEB_ROOT_PATH))
+	logger.Add(fmt.Sprintf("Starting webserver on port %d%s/", info.port, info.rootPath))
 	return man
 }
 func init() {

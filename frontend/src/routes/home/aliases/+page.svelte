@@ -4,6 +4,7 @@
 	import { fetchAliases, modAliases, type Addition } from '$lib/content/content';
 	import { StatusCodes } from 'http-status-codes';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import InputField from './InputField.svelte';
 
 	let blockChanges = $state(false);
@@ -33,7 +34,7 @@
 		const currentAliases = await fetchAliases();
 		if (currentAliases === null) return;
 		else if (currentAliases === StatusCodes.UNAUTHORIZED) {
-			goto('/login');
+			goto(`${base}/login`);
 			return;
 		}
 		aliases = currentAliases;

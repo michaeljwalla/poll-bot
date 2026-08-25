@@ -38,7 +38,6 @@ func GetAliases(w http.ResponseWriter, r *http.Request) {
 		general.ErrWrite(w, http.StatusInternalServerError, err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 }
 
 func SetAliases(w http.ResponseWriter, r *http.Request) {
@@ -61,6 +60,9 @@ func SetAliases(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			break
 		}
+	}
+	if err == nil {
+		err = aliases.Write()
 	}
 	if err != nil {
 		general.ErrWrite(w, http.StatusInternalServerError, err)
@@ -88,6 +90,9 @@ func DropAliases(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			break
 		}
+	}
+	if err == nil {
+		err = aliases.Write()
 	}
 	if err != nil {
 		general.ErrWrite(w, http.StatusInternalServerError, err)

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font: 13px/1.45 Roboto, Arial, sans-serif;
+        margin: 0; padding: 16px;
+        color: #202124; background: #fff;
+      }
+      label { display: block; margin-bottom: 12px; }
+      .label-text { display: block; margin-bottom: 4px; font-weight: 500; }
+      input {
+        box-sizing: border-box; width: 100%; padding: 7px 8px;
+        border: 1px solid #dadce0; border-radius: 4px;
+        font: inherit; color: inherit; background: #fff;
+      }
+      input:focus { outline: none; border-color: #1a73e8; }
+      .note { margin: 0 0 14px; color: #5f6368; font-size: 12px; }
+      .actions { display: flex; gap: 8px; justify-content: flex-end; }
+      button {
+        padding: 7px 16px; border-radius: 4px; font: inherit; cursor: pointer;
+        border: 1px solid #dadce0; background: #fff; color: #1a73e8;
+      }
+      button.primary { background: #1a73e8; border-color: #1a73e8; color: #fff; }
+      button[disabled] { opacity: .6; cursor: default; }
+      #status { margin: 0 0 12px; font-size: 12px; min-height: 1em; }
+      #status.err { color: #c5221f; }
+      #status.ok { color: #188038; }
+      #status.busy { color: #5f6368; }
+      @media (prefers-color-scheme: dark) {
+        body { color: #e8eaed; background: #292a2d; }
+        input { background: #202124; border-color: #5f6368; }
+        button { background: #292a2d; border-color: #5f6368; color: #8ab4f8; }
+        button.primary { background: #8ab4f8; border-color: #8ab4f8; color: #202124; }
+        .note, #status.busy { color: #9aa0a6; }
+        #status.err { color: #f28b82; }
+        #status.ok { color: #81c995; }
+      }
+    </style>
+  </head>
+  <body>
+    <form id="form" autocomplete="off"></form>
+    <p class="note" id="note"></p>
+    <p id="status"></p>
+    <div class="actions">
+      <button type="button" id="cancel">Cancel</button>
+      <button type="button" class="primary" id="save"></button>
+    </div>
+
+    <script>
+      // Injected unescaped: this is JSON built by the server, not user input.
+      var SPEC = <?!= spec ?>;
+
+      var form = document.getElementById('form');
+      var status = document.getElementById('status');
+      var save = document.getElementById('save');
+
+      save.textContent = SPEC.submit || 'Save';
+      if (SPEC.note) {
+        document.getElementById('note').textContent = SPEC.note;
+      }
+
+      SPEC.fields.forEach(function (field, index) {
+        var label = document.createElement('label');
+        var text = document.createElement('span');
+        text.className = 'label-text';
+        text.textContent = field.label;
+
+        var input = document.createElement('input');
+        input.type = field.type || 'text';
+        input.name = field.name;
+        input.value = field.value || '';
+        if (field.min !== undefined) { input.min = field.min; }
+        if (field.max !== undefined) { input.max = field.max; }
+        if (index === 0) { input.autofocus = true; }
+
+        label.appendChild(text);
+        label.appendChild(input);
+        form.appendChild(label);
+      });
+
+      function setStatus(text, kind) {
+        status.textContent = text;
+        status.className = kind || '';
+      }
+
+      function submit() {
+        var values = {};
+        SPEC.fields.forEach(function (field) {
+          values[field.name] = form.elements[field.name].value;
+        });
+
+        save.disabled = true;
+        setStatus('Working...', 'busy');
+
+        google.script.run
+          .withSuccessHandler(function (result) {
+            if (result && result.ok) {
+              setStatus(result.message, 'ok');
+              // Leave the message up long enough to read.
+              setTimeout(google.script.host.close, 1400);
+              return;
+            }
+            save.disabled = false;
+            setStatus(result ? result.message : 'Unknown error.', 'err');
+          })
+          .withFailureHandler(function (err) {
+            save.disabled = false;
+            setStatus(err && err.message ? err.message : String(err), 'err');
+          })
+          .dialogSubmit(SPEC.form, values);
+      }
+
+      save.addEventListener('click', submit);
+      document.getElementById('cancel').addEventListener('click', function () {
+        google.script.host.close();
+      });
+      // Enter submits; the form is never actually posted.
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        submit();
+      });
+
+      var first = form.querySelector('input');
+      if (first) { first.focus(); }
+    </script>
+  </body>
+</html>

@@ -3,3 +3,7 @@ data/
 .lost/
 build/
 /*.sh
+
+# compiled frontend, embedded at build time (see `make web`)
+root/api/web/dist/*
+!root/api/web/dist/.gitkeep

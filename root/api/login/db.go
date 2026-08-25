@@ -188,6 +188,20 @@ func ValidateToken(raw []byte) bool {
 	return claims.IsValidAt(time.Now())
 }
 
+// TokenExpiry reports when a valid token lapses. The session cookie is
+// HttpOnly, so a browser client cannot read the claim itself; this is how the
+// page learns how long it has left without the raw token being handed to JS.
+func TokenExpiry(raw []byte) (time.Time, bool) {
+	var claims jwt.RegisteredClaims
+	if err := jwt.ParseClaims(raw, verifier, &claims); err != nil {
+		return time.Time{}, false
+	}
+	if !claims.IsValidAt(time.Now()) || claims.ExpiresAt == nil {
+		return time.Time{}, false
+	}
+	return claims.ExpiresAt.Time, true
+}
+
 // all user creation / modifications are done through bot, no public rest for them
 func ModifyUser(id string, pass string, expiry time.Duration) error {
 	if !IsOpen() {

@@ -91,6 +91,9 @@ func GetPage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err)
 		return //getPageContent will handle
+	} else if nextPage == 0 && writer.Len() == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
 	}
 	//
 
@@ -236,6 +239,46 @@ func SetActive(w http.ResponseWriter, r *http.Request) {
 	}
 	err = bcp.Polls.SetActive(true, active...)
 	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(200)
+}
+
+type SetTitleWeb struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+func SetTitle(w http.ResponseWriter, r *http.Request) {
+	bcp, err := general.GetBCP()
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
+	var setters []SetTitleWeb
+	err = json.NewDecoder(r.Body).Decode(&setters)
+	if err != nil {
+		general.ErrWrite(w, http.StatusBadRequest, err)
+		return
+	}
+
+	//a repeated id would silently keep whichever copy landed last in the map
+	//below, so the batch would report more titles set than it stored.
+	overrides := make(map[string]string, len(setters))
+	for _, setter := range setters {
+		if _, err := unix.SnowflakeToTime(setter.ID); err != nil {
+			general.ErrWrite(w, http.StatusBadRequest, ErrBadPollID)
+			return
+		}
+		if _, seen := overrides[setter.ID]; seen {
+			general.ErrWrite(w, http.StatusBadRequest, ErrDuplicatePollID)
+			return
+		}
+		overrides[setter.ID] = setter.Title
+	}
+
+	if err := bcp.Polls.SetTitleOverride(overrides); err != nil {
 		general.ErrWrite(w, http.StatusInternalServerError, err)
 		return
 	}

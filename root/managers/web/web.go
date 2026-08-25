@@ -17,7 +17,7 @@ type WebManager struct{}
 
 var manager atomic.Pointer[WebManager]
 
-func New(port int, urlRootPath string, dbPath string, signingKey []byte) (man *WebManager, err error) {
+func New(port int, urlRootPath string, dbPath string, signingKey []byte, secureCookies bool) (man *WebManager, err error) {
 	if manager.Load() != nil {
 		return nil, errors.New("web manager already started")
 	}
@@ -27,7 +27,7 @@ func New(port int, urlRootPath string, dbPath string, signingKey []byte) (man *W
 		return nil, errors.New("web manager contested")
 	}
 
-	if err := api.Start(port, urlRootPath, dbPath, signingKey); err != nil {
+	if err := api.Start(port, urlRootPath, dbPath, signingKey, secureCookies); err != nil {
 		manager.CompareAndSwap(man, nil)
 		return nil, fmt.Errorf("couldn't start webserver: %v", err)
 	}

@@ -173,3 +173,15 @@ func (table *FileDict[K, V]) Set(key K, value V) error {
 	table.data[key] = value
 	return nil
 }
+func (table *FileDict[K, V]) Drop(key K) error {
+	if err := table.lockOrClosed(); err != nil {
+		return err
+	}
+	defer table.mutex.Unlock()
+	//
+	if _, ok := table.data[key]; !ok {
+		return nil
+	}
+	delete(table.data, key)
+	return nil
+}

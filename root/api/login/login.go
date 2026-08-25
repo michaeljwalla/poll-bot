@@ -8,6 +8,7 @@ import (
 	"poll-bot/root/api/general"
 	"poll-bot/root/api/types"
 	"regexp"
+	"strings"
 )
 
 var newErrResponse = general.NewErrResponse
@@ -102,6 +103,25 @@ func validateLoginBody(w http.ResponseWriter, r *http.Request, body *LoginBody) 
 	return true
 }
 
+// The session cookie is scoped to the path the app is actually mounted at, so
+// hosting under a shared domain (my-site.com/pb) does not hand the token to
+// every other app on that domain. Secure is off by default because plain-http
+// localhost is the dev target; PROD turns it on.
+var cookieOpts = struct {
+	Path   string
+	Secure bool
+}{Path: "/"}
+
+// SetCookieOptions must be called before the server starts serving.
+func SetCookieOptions(rootPath string, secure bool) {
+	path := strings.TrimSuffix(rootPath, "/")
+	if path == "" {
+		path = "/"
+	}
+	cookieOpts.Path = path
+	cookieOpts.Secure = secure
+}
+
 func getUnverifiedTokenFromCookie(r *http.Request) ([]byte, error) {
 	auth, err := r.Cookie("Authorization")
 	if err != nil {
@@ -123,7 +143,9 @@ func requestTokenReauthentication(w http.ResponseWriter) {
 		Name:     "Authorization",
 		Value:    "",
 		HttpOnly: true,
-		Path:     "/",
+		Secure:   cookieOpts.Secure,
+		SameSite: http.SameSiteLaxMode,
+		Path:     cookieOpts.Path,
 		MaxAge:   -1,
 	})
 	general.ErrWrite(w, http.StatusUnauthorized, ErrInvalidToken)
@@ -168,7 +190,9 @@ func ValidateLogin(w http.ResponseWriter, r *http.Request) {
 		Name:     "Authorization",
 		Value:    token.String(),
 		HttpOnly: true,
-		Path:     "/",
+		Secure:   cookieOpts.Secure,
+		SameSite: http.SameSiteLaxMode,
+		Path:     cookieOpts.Path,
 		MaxAge:   int(data.Expiry.Seconds()),
 	})
 	w.WriteHeader(200)
@@ -219,4 +243,31 @@ func MiddlewareTokenValidator(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+type CheckResponse struct {
+	//unix milliseconds, so the browser can use it without unit juggling
+	ExpiresAt int64 `json:"expiresAt"`
+}
+
+// CheckLogin sits behind MiddlewareTokenValidator, so reaching it at all means
+// the cookie is valid; the body only carries how long that stays true.
+func CheckLogin(w http.ResponseWriter, r *http.Request) {
+	token, err := getUnverifiedTokenFromCookie(r)
+	if err != nil || token == nil {
+		general.ErrWrite(w, http.StatusUnauthorized, ErrNoToken)
+		return
+	}
+	expiry, ok := TokenExpiry(token)
+	if !ok {
+		general.ErrWrite(w, http.StatusUnauthorized, ErrInvalidToken)
+		return
+	}
+	body, err := json.Marshal(&CheckResponse{ExpiresAt: expiry.UnixMilli()})
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(body) //nolint
 }

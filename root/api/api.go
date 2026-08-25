@@ -39,10 +39,11 @@ func initRouter(port int, rootPath string) error {
 
 	// API
 	r.Route(rootPath+"/api/"+API_VER, func(r chi.Router) {
-		// login (no validator)
-		r.Post("/login", login.ValidateLogin)
-		r.Post("/login/json", login.GetLoginTokenJSON)
-		r.With(validator).Get("/login/check", func(http.ResponseWriter, *http.Request) {})
+		// login (no validator, but rate limited by source address)
+		limiter := login.MiddlewareLoginLimiter
+		r.With(limiter).Post("/login", login.ValidateLogin)
+		r.With(limiter).Post("/login/json", login.GetLoginTokenJSON)
+		r.With(login.MiddlewareLoginBanCheck, validator).Get("/login/check", func(http.ResponseWriter, *http.Request) {})
 
 		// paginated polls getter
 		r.With(validator).Get("/polls", polls.GetPage)

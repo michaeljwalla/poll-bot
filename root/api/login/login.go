@@ -264,3 +264,37 @@ func MiddlewareTokenValidator(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+type CheckResponse struct {
+	//unix milliseconds, so the browser can use it without unit juggling
+	ExpiresAt int64 `json:"expiresAt"`
+}
+
+// CheckLogin sits behind MiddlewareTokenValidator, so reaching it at all means
+// the cookie is valid; the body only carries how long that stays true.
+func CheckLogin(w http.ResponseWriter, r *http.Request) {
+	var token []byte
+	var err error
+	headerToken := r.Header.Get("Authorization")
+	if headerToken != "" {
+		token, err = getUnverifiedTokenFromHeader(headerToken)
+	} else {
+		token, err = getUnverifiedTokenFromCookie(r)
+	}
+	if err != nil || token == nil {
+		general.ErrWrite(w, http.StatusUnauthorized, ErrNoToken)
+		return
+	}
+	expiry, ok := TokenExpiry(token)
+	if !ok {
+		general.ErrWrite(w, http.StatusUnauthorized, ErrInvalidToken)
+		return
+	}
+	body, err := json.Marshal(&CheckResponse{ExpiresAt: expiry.UnixMilli()})
+	if err != nil {
+		general.ErrWrite(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(body) //nolint
+}

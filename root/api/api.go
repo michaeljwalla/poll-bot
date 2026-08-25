@@ -43,7 +43,7 @@ func initRouter(port int, rootPath string) error {
 		limiter := login.MiddlewareLoginLimiter
 		r.With(limiter).Post("/login", login.ValidateLogin)
 		r.With(limiter).Post("/login/json", login.GetLoginTokenJSON)
-		r.With(login.MiddlewareLoginBanCheck, validator).Get("/login/check", func(http.ResponseWriter, *http.Request) {})
+		r.With(login.MiddlewareLoginBanCheck, validator).Get("/login/check", login.CheckLogin)
 
 		// paginated polls getter
 		r.With(validator).Get("/polls", polls.GetPage)

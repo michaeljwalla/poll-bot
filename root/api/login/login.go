@@ -230,9 +230,26 @@ func GetLoginTokenJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusCreated)
 }
+
+var headerTokenMatcher = regexp.MustCompile("Bearer ([A-Za-z0-9._-]+)$")
+
+func getUnverifiedTokenFromHeader(htok string) ([]byte, error) {
+	encoded := headerTokenMatcher.FindStringSubmatch(htok)[1]
+	if encoded == "" {
+		return nil, nil
+	}
+	return []byte(encoded), nil
+}
 func MiddlewareTokenValidator(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		existingToken, err := getUnverifiedTokenFromCookie(r)
+		headerToken := r.Header.Get("Authorization")
+		var existingToken []byte
+		var err error
+		if headerToken != "" {
+			existingToken, err = getUnverifiedTokenFromHeader(headerToken)
+		} else {
+			existingToken, err = getUnverifiedTokenFromCookie(r)
+		}
 		if err != nil {
 			general.ErrWrite(w, http.StatusInternalServerError, err)
 			return
@@ -246,31 +263,4 @@ func MiddlewareTokenValidator(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-type CheckResponse struct {
-	//unix milliseconds, so the browser can use it without unit juggling
-	ExpiresAt int64 `json:"expiresAt"`
-}
-
-// CheckLogin sits behind MiddlewareTokenValidator, so reaching it at all means
-// the cookie is valid; the body only carries how long that stays true.
-func CheckLogin(w http.ResponseWriter, r *http.Request) {
-	token, err := getUnverifiedTokenFromCookie(r)
-	if err != nil || token == nil {
-		general.ErrWrite(w, http.StatusUnauthorized, ErrNoToken)
-		return
-	}
-	expiry, ok := TokenExpiry(token)
-	if !ok {
-		general.ErrWrite(w, http.StatusUnauthorized, ErrInvalidToken)
-		return
-	}
-	body, err := json.Marshal(&CheckResponse{ExpiresAt: expiry.UnixMilli()})
-	if err != nil {
-		general.ErrWrite(w, http.StatusInternalServerError, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(body) //nolint
 }

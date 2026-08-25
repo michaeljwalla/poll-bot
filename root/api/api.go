@@ -33,8 +33,6 @@ func initRouter(port int, rootPath string) error {
 	validator := login.MiddlewareTokenValidator
 	// A good base middleware stack
 	r.Use(middleware.RequestID)
-	r.Use(middleware.ClientIPFromRemoteAddr) // pick one ClientIPFrom* based on your infra, see below
-	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
 	r.Use(middleware.Timeout(60 * time.Second))

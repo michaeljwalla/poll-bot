@@ -37,6 +37,6 @@ logs:
 # add env vars and overwrite MODE
 dev: init
 	ln -srf ./data ./backend/core/data
-	export $$(grep -v '^#' .env | xargs);
+	export $$(grep -v '^#' .env | xargs) && \
 		cd backend/core && \
-			go run -ldflags "-X 'poll-bot/src/version.version=dev' -X 'poll-bot/src/version.source=local'" .
+			go run -ldflags "-X 'poll-bot/root/info/version.version=dev' -X 'poll-bot/root/info/version.source=local'" .

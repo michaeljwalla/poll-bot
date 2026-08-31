@@ -3,7 +3,7 @@ services:
     env_file: .env
     
     build:
-      context: .
+      context: ./backend
       no_cache: true
     
     # cloudflared connects to this from the host; bound to loopback so the

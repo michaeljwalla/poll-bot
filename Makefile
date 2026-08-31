@@ -1,7 +1,7 @@
 .PHONY : init built up down logs dev update web
 .DEFAULT_GOAL := build # -> just make
 
-# setup data/
+# setup data/ and link env
 init:
 	@if [ ! -f .env ]; then \
 		echo ".env file not found"; \
@@ -10,30 +10,33 @@ init:
 	mkdir -p ./data/logs/ ./data/polls/
 
 
-# Compiles the SPA into root/api/web/dist, where go:embed picks it up. Run this
+# Compiles the SPA where go:embed picks it up. Run this
 # before `go build`/`make dev` to serve the real pages off the Go binary
 web:
-	cd frontend && WEB_ROOT_PATH="$$(grep -E '^WEB_ROOT_PATH=' ../.env | cut -d= -f2-)" pnpm install --frozen-lockfile && \
-		WEB_ROOT_PATH="$$(grep -E '^WEB_ROOT_PATH=' ../.env | cut -d= -f2-)" pnpm run build
+	$(MAKE) -C ./frontend/
 
 build: init
-	docker compose build
+	$(MAKE) -C ./backend/ build
+
+all: init web build
 
 up: init
-	docker compose up -d
+	$(MAKE) -C ./backend/ up
 
 update:
 	$(MAKE) down
 	git pull
-	$(MAKE) build
+	$(MAKE)
 
 down:
-	docker compose down
+	$(MAKE) -C ./backend/ down
 
-# condition passes keyb sigint
 logs:
-	@docker compose logs -f || [ $$? -eq 130 ]
+	$(MAKE) -C ./backend/ logs
 
 # add env vars and overwrite MODE
 dev: init
-	export $$(grep -v '^#' .env | xargs); go run -ldflags "-X 'poll-bot/src/version.version=dev' -X 'poll-bot/src/version.source=local'" .
+	ln -srf ./data ./backend/core/data
+	export $$(grep -v '^#' .env | xargs);
+		cd backend/core && \
+			go run -ldflags "-X 'poll-bot/src/version.version=dev' -X 'poll-bot/src/version.source=local'" .

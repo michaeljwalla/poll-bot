@@ -10,7 +10,7 @@ const base: '' | `/${string}` =
 	raw === '' ? '' : raw.startsWith('/') ? (raw as `/${string}`) : `/${raw}`;
 
 // Go embeds this directory, so the build has to land inside the Go module.
-const OUT_DIR = '../root/api/web/dist';
+const OUT_DIR = process.env.OUTPUT_DIR ?? './dist/';
 
 const API_TARGET = 'http://localhost:10000';
 

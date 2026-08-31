@@ -40,7 +40,7 @@ jobs:
       - name: dependencies
         run: go mod download
 
-      # the SPA is compiled into root/api/web/dist and embedded by go:embed,
+      # the SPA is compiled into dist/ and embedded by go:embed,
       # so it has to exist before go build runs
       - name: setup node
         uses: actions/setup-node@v4

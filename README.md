@@ -57,7 +57,7 @@ deployment is still one artifact and one process. Go serves both the pages and
 the API on `SERVER_PORT`.
 
 ```sh
-make web    # compile the SPA into root/api/web/dist (go:embed reads it)
+make web    # compile the SPA (go:embed reads it)
 make dev    # then run; skip `make web` and you get a "not built" notice page
 ```
 

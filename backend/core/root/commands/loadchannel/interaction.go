@@ -180,11 +180,6 @@ func iClose(s *session, state *iState) (bool, error) {
 		msg += fmt.Sprintf("Added %d polls to the queue heap for processing", len(query.polls))
 	}
 	msg += "\n-# This interaction has ended."
-	// TODO
-	// make a translator func for discordgo.Message bc its unnecessarily large
-	// for this use case.
-	// write to external data that isn't the queue. may need to do
-	// some form of chunking.
 
 	// to remove options
 	empty := list[discordgo.MessageComponent]()

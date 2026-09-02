@@ -3,6 +3,7 @@ package rate
 import (
 	"fmt"
 	"poll-bot/root/managers/authorize"
+	"poll-bot/root/managers/polls"
 	"poll-bot/root/types"
 	"strconv"
 	"strings"
@@ -112,13 +113,24 @@ func Register(bcp *types.BotCommandPackage) {
 				Question: discordgo.PollMedia{Text: topicOption.StringValue()},
 				Answers:  *get_rate_answers(optionMap),
 			}
-			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+
+			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Poll: &poll,
 					// Flags: discordgo.MessageFlagsEphemeral,
 				},
 			})
+			if err != nil {
+				return err
+			}
+
+			msg, err := s.InteractionResponse(i.Interaction)
+			if err != nil {
+				return err
+			}
+			_, err = bcp.Polls.Push(*polls.From(msg, i.GuildID))
+			return err
 		},
 	}
 }

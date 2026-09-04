@@ -104,3 +104,34 @@ func (man *PollManager) GetTopOrdered() ([]Poll, bool) {
 	})
 	return data, true
 }
+
+// drops every queued poll whose Discord message is gone
+func (man *PollManager) CleanQueue() (dropped int, err error) {
+	man.queue.Lock()
+	defer man.queue.Unlock()
+	//
+	data := make([]Poll, 0, man.queue.LenLocked())
+	stale := make([]snowflake, 0)
+	for poll := range man.queue.IterLocked() {
+		if _, err := man.GetData(&poll); err == ErrMessageNotFound {
+			stale = append(stale, poll.Message.ID)
+			continue
+		}
+		data = append(data, poll)
+	}
+	if len(stale) == 0 { //nothing to drop, so nothing to rewrite
+		return 0, nil
+	}
+	if err := man.queue.ClearLocked(); err != nil {
+		return 0, err
+	}
+	if err := man.queue.MergeLocked(data...); err != nil {
+		return 0, err
+	}
+	// the ids live in the set only to dedupe pushes; a message that no longer
+	// exists must not keep occupying its slot
+	for _, id := range stale {
+		man.set.Remove(id)
+	}
+	return len(stale), nil
+}

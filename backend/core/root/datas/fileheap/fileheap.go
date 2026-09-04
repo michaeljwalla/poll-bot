@@ -98,11 +98,35 @@ func (heap *FileHeap[K]) Iter() iter.Seq[K] {
 		}
 	}
 }
+func (heap *FileHeap[K]) IterLocked() iter.Seq[K] {
+	return func(yield func(K) bool) {
+		snapshot := make([]K, len(heap.inner.data))
+		copy(snapshot, heap.inner.data)
+		//
+		for _, item := range snapshot {
+			if !yield(item) {
+				return
+			}
+		}
+	}
+}
 
 func (heap *FileHeap[K]) Len() int {
 	heap.mutex.RLock()
 	defer heap.mutex.RUnlock()
 	return heap.inner.Len()
+}
+func (heap *FileHeap[K]) LenLocked() int {
+	return heap.inner.Len()
+
+}
+
+func (heap *FileHeap[K]) Lock() {
+	heap.mutex.Lock()
+}
+
+func (heap *FileHeap[K]) Unlock() {
+	heap.mutex.Unlock()
 }
 
 func (heap *FileHeap[K]) Push(value K) error {
@@ -110,8 +134,10 @@ func (heap *FileHeap[K]) Push(value K) error {
 		return err
 	}
 	defer heap.mutex.Unlock()
+	return heap.PushLocked(value)
+}
+func (heap *FileHeap[K]) PushLocked(value K) error {
 	heaps.Push(&heap.inner, value)
-
 	jsonData, err := json.Marshal(&value)
 	if err != nil {
 		return fmt.Errorf("while marshaling %v: %v", value, err)
@@ -145,7 +171,7 @@ func (heap *FileHeap[K]) TryTake(want func(*K) bool) (top *K, taken bool, err er
 	if !want(&value) {
 		return &value, false, nil
 	}
-	popped, err := heap.popLocked()
+	popped, err := heap.PopLocked()
 	return &popped, true, err
 }
 
@@ -155,11 +181,11 @@ func (heap *FileHeap[K]) Pop() (K, error) {
 		return zero, err
 	}
 	defer heap.mutex.Unlock()
-	return heap.popLocked()
+	return heap.PopLocked()
 }
 
 // caller holds the write lock and has already checked closed
-func (heap *FileHeap[K]) popLocked() (K, error) {
+func (heap *FileHeap[K]) PopLocked() (K, error) {
 	var zero K
 	if heap.inner.Len() == 0 {
 		return zero, errors.New("empty")
@@ -175,6 +201,19 @@ func (heap *FileHeap[K]) popLocked() (K, error) {
 	return value, err
 }
 
+// ClearLocked empties the heap: both the backing rows and the in-memory data
+// the rest of the type reads from. Dropping only the rows leaves every item
+// still queued until the next process restart, so a caller clearing to rewrite
+// the heap would append its survivors onto the full old contents. Caller holds
+// the write lock. Memory is only cleared once the file agrees, so a failed
+// delete leaves the heap as it was.
+func (heap *FileHeap[K]) ClearLocked() error {
+	if _, err := heap.file.Exec("DELETE FROM data;"); err != nil { //no TRUNCATE TABLE in sqlite
+		return err
+	}
+	heap.inner.data = heap.inner.data[:0]
+	return nil
+}
 func (heap *FileHeap[K]) Merge(value ...K) error {
 	if len(value) == 0 { //otherwise builds a VALUES clause with no rows
 		return nil
@@ -183,6 +222,12 @@ func (heap *FileHeap[K]) Merge(value ...K) error {
 		return err
 	}
 	defer heap.mutex.Unlock()
+	return heap.MergeLocked(value...)
+}
+func (heap *FileHeap[K]) MergeLocked(value ...K) error {
+	if len(value) == 0 {
+		return nil
+	}
 	heap.inner.data = append(heap.inner.data, value...)
 	heaps.Init(&heap.inner)
 

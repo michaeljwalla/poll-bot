@@ -2,6 +2,7 @@ package status
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"poll-bot/root/datas/set"
 	"poll-bot/root/managers/polls"
@@ -12,22 +13,43 @@ import (
 
 type poll = polls.Poll
 
+// A queued poll whose message Discord 404s can never be rendered, so the queue
+// is cleaned and the top re-read. The retry is driven by what the clean
+// actually dropped: a clean that removes nothing hands back the same stale top,
+// and looping on that is what spun forever before.
 func view_queue(bcp *types.BotCommandPackage) (messages []*discordgo.Message, poll []polls.Poll, count int, err error) {
-	polls, ok := bcp.Polls.GetTopOrdered()
-	if !ok {
-		return nil, nil, 0, nil
-	}
-
-	messages = make([]*discordgo.Message, len(polls))
-	for i, poll := range polls {
-		msg, err := bcp.Polls.GetData(&poll)
-		if err != nil {
-			return nil, nil, -1, fmt.Errorf("on Polls.GetData (%v): %v", poll, err)
+	for {
+		polldata, ok := bcp.Polls.GetTopOrdered()
+		if !ok {
+			return nil, nil, 0, nil
 		}
-		messages[i] = msg
-	}
 
-	return messages, polls, bcp.Polls.Len(), nil
+		messages = make([]*discordgo.Message, len(polldata))
+		missing := false
+		for i, poll := range polldata {
+			msg, err := bcp.Polls.GetData(&poll)
+			if err == polls.ErrMessageNotFound {
+				missing = true
+				break
+			}
+			if err != nil {
+				return nil, nil, -1, fmt.Errorf("on Polls.GetData (%v): %v", poll, err)
+			}
+			messages[i] = msg
+		}
+		if !missing {
+			return messages, polldata, bcp.Polls.Len(), nil
+		}
+
+		dropped, err := bcp.Polls.CleanQueue()
+		if err != nil {
+			return nil, nil, -1, fmt.Errorf("while cleaning queue: %v", err)
+		}
+		if dropped == 0 {
+			return nil, nil, -1, fmt.Errorf("queued poll has no message but CleanQueue dropped nothing")
+		}
+		log.Printf("retrying view_queue after dropping %d stale poll(s)...", dropped)
+	}
 }
 
 type pollFormatted struct {

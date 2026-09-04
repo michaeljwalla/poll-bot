@@ -1,6 +1,7 @@
 package status
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -28,7 +29,7 @@ func view_queue(bcp *types.BotCommandPackage) (messages []*discordgo.Message, po
 		missing := false
 		for i, poll := range polldata {
 			msg, err := bcp.Polls.GetData(&poll)
-			if err == polls.ErrMessageNotFound {
+			if errors.Is(err, polls.ErrMessageNotFound) {
 				missing = true
 				break
 			}

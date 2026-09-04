@@ -1,6 +1,7 @@
 package polls
 
 import (
+	"errors"
 	"slices"
 	"time"
 )
@@ -113,7 +114,7 @@ func (man *PollManager) CleanQueue() (dropped int, err error) {
 	data := make([]Poll, 0, man.queue.LenLocked())
 	stale := make([]snowflake, 0)
 	for poll := range man.queue.IterLocked() {
-		if _, err := man.GetData(&poll); err == ErrMessageNotFound {
+		if _, err := man.GetData(&poll); errors.Is(err, ErrMessageNotFound) {
 			stale = append(stale, poll.Message.ID)
 			continue
 		}

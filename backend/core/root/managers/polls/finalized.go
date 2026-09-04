@@ -70,22 +70,34 @@ const (
 	INS_ERR_RECOVER_BREAK_IGNORE
 	INS_ERR_STOP
 	INS_ERR_SHUTDOWN
+	INS_ERR_RECOVER_DROP
 )
 
 // any of the ERR_* excl. ERR_NEW
-func handle_insertion_err(err error, ch chan int, cher chan<- error) (doBreak bool, doReturn bool) {
+func handle_insertion_err(err error, ch chan int, cher chan<- error) (doBreak bool, doReturn bool, doDrop bool) {
 	cher <- err
 	ch <- INS_ERR_NEW
 	next := <-ch
 
 	switch next {
 	case INS_ERR_STOP:
-		return true, false
+		return true, false, false
 	case INS_ERR_SHUTDOWN: //instant give up
-		return false, true
+		return false, true, false
+	case INS_ERR_RECOVER_DROP:
+		return false, false, true
 	default: //ERR IGNORE
-		return false, false
+		return false, false, false
 	}
+}
+
+// A dropped poll is only really dropped once the batch cutoff passes it: the
+// caller requeues everything from the cutoff on, so a poll left behind it gets
+// seated again and fails the same way forever. Advancing costs the same
+// handshake a written row does.
+func drop_insertion(i int, done chan int) (doBreak bool) {
+	done <- -i
+	return <-done == INS_FETCH_STOP
 }
 
 // Returns finalized records from both the results and manual tables. With no
@@ -179,17 +191,25 @@ func (man *PollManager) Insert(mode fetchMode, done chan int, cher chan<- error,
 	channeled := done != nil && cher != nil
 
 	s := man.session.Load()
+batch:
 	for i, poll := range p {
 		//load message
 		if _, err := poll.LiveMessage(mode, s); err != nil {
 			if !channeled {
 				return err
 			}
-			if doBreak, doReturn := handle_insertion_err(err, done, cher); doReturn {
+			doBreak, doReturn, doDrop := handle_insertion_err(err, done, cher)
+			switch {
+			case doReturn:
 				return err
-			} else if doBreak {
-				break
-			} else {
+			case doBreak:
+				break batch
+			case doDrop:
+				if drop_insertion(i, done) {
+					break batch
+				}
+				continue
+			default:
 				continue
 			}
 		}
@@ -216,7 +236,8 @@ func (man *PollManager) Insert(mode fetchMode, done chan int, cher chan<- error,
 			if !channeled {
 				return err
 			}
-			if doBreak, doReturn := handle_insertion_err(err, done, cher); doReturn {
+			//no drop case: the message is still there, it just is not done yet.
+			if doBreak, doReturn, _ := handle_insertion_err(err, done, cher); doReturn {
 				return err
 			} else if doBreak {
 				break
@@ -233,17 +254,29 @@ func (man *PollManager) Insert(mode fetchMode, done chan int, cher chan<- error,
 
 			pdVoters, err := s.PollAnswerVoters(poll.realMessage.ChannelID, poll.realMessage.ID, ans.AnswerID)
 			if err != nil {
-				err := fmt.Errorf("while fetching voters: %v", err)
+				//%w, and tagged: a message deleted between the fetch above and
+				//this call 404s here instead, and the caller decides to drop by
+				//unwrapping. %v would flatten that back into an opaque string.
+				err := fmt.Errorf("while fetching voters: %w", notFound(poll.Message.ID, err))
 				if !channeled {
 					return err
-				} else {
-					if doBreak, doReturn := handle_insertion_err(err, done, cher); doReturn {
-						return err
-					} else if doBreak {
-						break
-					} else {
-						continue
+				}
+				doBreak, doReturn, doDrop := handle_insertion_err(err, done, cher)
+				switch {
+				case doReturn:
+					return err
+				case doBreak:
+					break batch
+				case doDrop:
+					if drop_insertion(i, done) {
+						break batch
 					}
+					continue batch
+				default:
+					//one answer short is not this poll's result, so it is
+					//skipped whole and retried later. The old `continue` here
+					//walked to the next answer and wrote the gap as a record.
+					continue batch
 				}
 			}
 			voters := make([]snowflake, 0, len(pdVoters))
@@ -260,7 +293,8 @@ func (man *PollManager) Insert(mode fetchMode, done chan int, cher chan<- error,
 		jsonOptions, err := json.Marshal(options)
 		if err != nil {
 			err := fmt.Errorf("insertion marshaling %v: %v", options, err)
-			if doBreak, doReturn := handle_insertion_err(err, done, cher); doReturn {
+			//no drop case: a marshal failure says nothing about the message.
+			if doBreak, doReturn, _ := handle_insertion_err(err, done, cher); doReturn {
 				return err
 			} else if doBreak {
 				break
@@ -271,7 +305,8 @@ func (man *PollManager) Insert(mode fetchMode, done chan int, cher chan<- error,
 		jsonAnswers, err := json.Marshal(answers)
 		if err != nil {
 			err := fmt.Errorf("insertion marshaling %v: %v", answers, err)
-			if doBreak, doReturn := handle_insertion_err(err, done, cher); doReturn {
+			//no drop case: a marshal failure says nothing about the message.
+			if doBreak, doReturn, _ := handle_insertion_err(err, done, cher); doReturn {
 				return err
 			} else if doBreak {
 				break

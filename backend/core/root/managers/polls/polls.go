@@ -65,7 +65,7 @@ func (p *Poll) LiveMessage(mode fetchMode, s *discordgo.Session) (*discordgo.Mes
 	//REFETCH \/
 	msg, err := s.ChannelMessage(p.Message.ChannelID, p.Message.ID)
 	if err != nil {
-		return nil, err
+		return nil, notFound(p.Message.ID, err)
 	}
 	p.realMessage = msg
 	return msg, err

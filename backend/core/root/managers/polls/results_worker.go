@@ -158,6 +158,18 @@ func (wr *resultsWorker) handleInsertStatus(ch chan int, cher <-chan error) (ok 
 	}
 	switch status {
 	case INS_ERR_NEW:
+		// A poll whose message Discord no longer has can never be finalized,
+		// so retrying it is a permanent loop rather than a slow recovery. It
+		// is reported here, at the moment of the decision, because the batch
+		// counts printed at the end cannot distinguish a drop from a write.
+		var gone *MessageNotFound
+		if errors.As(err, &gone) {
+			//the title lives on the message, which is exactly what is missing,
+			//so the id is all there is to name it by.
+			wr.sendMessage(WORKER_BUSY, fmt.Sprintf("I dropped poll %s due to: %v", gone.ID, gone.cause))
+			ch <- INS_ERR_RECOVER_DROP
+			return wr.handleInsertStatus(ch, cher)
+		}
 		wr.logger.Warn(fmt.Sprintf("couldn't gen a record: %v", err), audit.LogGroup.WORKER)
 		ch <- INS_ERR_RECOVER_BREAK_IGNORE
 		// Insert goroutine keeps going; wait for its next status so it
